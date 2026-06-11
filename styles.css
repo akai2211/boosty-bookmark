@@ -151,11 +151,17 @@
   background-color: var(--lf-hover-bg);
 }
 
+.lf-btn-icon.lf-active {
+  color: var(--lf-primary);
+  background-color: var(--lf-hover-bg);
+}
+
 .lf-btn-icon svg {
   width: 18px;
   height: 18px;
   fill: currentColor;
 }
+
 
 /* Stats */
 .lf-stats {
@@ -633,3 +639,285 @@
   fill: currentColor;
   opacity: 0.5;
 }
+
+/* Settings Page Styling */
+.lf-settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lf-settings-section {
+  background-color: var(--lf-card-bg);
+  border: 1px solid var(--lf-border);
+  border-radius: var(--lf-border-radius);
+  padding: 14px;
+}
+
+.lf-settings-title {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lf-text);
+  border-bottom: 1px solid var(--lf-border);
+  padding-bottom: 6px;
+}
+
+.lf-settings-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 10px;
+}
+
+.lf-settings-row:last-child {
+  margin-bottom: 0;
+}
+
+.lf-settings-label {
+  font-size: 12px;
+  color: var(--lf-text);
+  cursor: pointer;
+  user-select: none;
+  flex: 1;
+}
+
+.lf-settings-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--lf-primary);
+  margin-top: 2px;
+}
+
+.lf-settings-desc {
+  font-size: 11px;
+  color: var(--lf-text-muted);
+  margin-top: 4px;
+  line-height: 1.3;
+}
+
+.lf-settings-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.lf-btn-primary {
+  flex: 1;
+  background-color: var(--lf-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--lf-border-radius);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color 0.2s;
+}
+
+.lf-btn-primary:hover {
+  background-color: var(--lf-primary-hover);
+}
+
+.lf-btn-secondary {
+  flex: 1;
+  background-color: var(--lf-input-bg);
+  color: var(--lf-text);
+  border: 1px solid var(--lf-border);
+  border-radius: var(--lf-border-radius);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color 0.2s;
+}
+
+.lf-btn-secondary:hover {
+  background-color: var(--lf-hover-bg);
+}
+
+.lf-btn-icon-label svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* Tab Order Styles */
+.lf-tab-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lf-tab-order-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--lf-input-bg);
+  border: 1px solid var(--lf-border);
+  border-radius: var(--lf-border-radius);
+  padding: 8px 12px;
+}
+
+.lf-tab-order-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lf-text);
+}
+
+.lf-tab-order-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.lf-tab-order-btn {
+  background: none;
+  border: 1px solid var(--lf-border);
+  color: var(--lf-text);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.lf-tab-order-btn:hover:not(:disabled) {
+  background-color: var(--lf-hover-bg);
+  color: var(--lf-primary);
+  border-color: var(--lf-primary);
+}
+
+.lf-tab-order-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Drag & Drop Styles */
+.lf-tab-order-item * {
+  pointer-events: none;
+}
+
+.lf-tab-order-item .lf-tab-order-btns,
+.lf-tab-order-item .lf-tab-order-btns *,
+.lf-tab-order-item .lf-drag-handle,
+.lf-tab-order-item .lf-drag-handle * {
+  pointer-events: auto;
+}
+
+.lf-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lf-text-muted);
+  cursor: grab;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.lf-drag-handle:hover {
+  color: var(--lf-primary);
+  background-color: var(--lf-hover-bg);
+}
+
+.lf-drag-handle:active {
+  cursor: grabbing;
+}
+
+.lf-drag-handle svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.lf-tab-order-item.lf-dragging {
+  opacity: 0.4;
+  border: 1px dashed var(--lf-primary);
+  background-color: var(--lf-input-bg);
+}
+
+.lf-tab-order-item.lf-drag-over {
+  border: 1px solid var(--lf-primary);
+  background-color: var(--lf-hover-bg);
+}
+
+/* Collapsible Settings Section */
+.lf-settings-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.lf-settings-section-header:hover .lf-settings-title {
+  color: var(--lf-primary);
+}
+
+.lf-collapse-arrow {
+  width: 20px;
+  height: 20px;
+  fill: var(--lf-text-muted);
+  transition: transform 0.2s, fill 0.2s;
+}
+
+.lf-settings-section-header:hover .lf-collapse-arrow {
+  fill: var(--lf-primary);
+}
+
+.lf-settings-section.lf-expanded .lf-collapse-arrow {
+  transform: rotate(180deg);
+}
+
+.lf-settings-section-body {
+  display: none;
+  margin-top: 12px;
+}
+
+.lf-settings-section.lf-expanded .lf-settings-section-body {
+  display: block;
+}
+
+/* Custom Select styling */
+.lf-settings-select {
+  background-color: var(--lf-input-bg);
+  border: 1px solid var(--lf-border-color);
+  color: var(--lf-text-color);
+  font-family: var(--lf-font-family);
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.lf-settings-select:hover {
+  border-color: var(--lf-primary);
+}
+
+.lf-settings-select:focus {
+  border-color: var(--lf-primary);
+  box-shadow: 0 0 0 2px rgba(230, 91, 16, 0.2);
+}
+
+
+
+
+

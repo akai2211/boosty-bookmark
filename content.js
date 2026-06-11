@@ -13,6 +13,16 @@
     'важная новость', 'новости канала'
   ];
 
+  // Маппинг ключей вкладок и их человекочитаемых названий
+  const TAB_NAMES = {
+    watching: 'Смотрю',
+    favorite: 'Избранное',
+    new: 'Новые',
+    all: 'Все',
+    completed: 'Пройдено',
+    dropped: 'Брошено'
+  };
+
   // SVG-путь иконки лисы (используется в нескольких местах интерфейса)
   const FOX_SVG_PATH = 'M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12C20,13.72 19.46,15.31 18.55,16.62L17.06,14.65C17.38,13.82 17.2,12.87 16.54,12.21C15.8,11.47 14.65,11.41 13.84,12.03L12,10.19V6H11V10.19L9.16,12.03C8.35,11.41 7.2,11.47 6.46,12.21C5.8,12.87 5.62,13.82 5.94,14.65L4.45,16.62C3.54,15.31 3,13.72 3,12A8,8 0 0,1 12,4M12,12.5A1.5,1.5 0 0,0 10.5,14A1.5,1.5 0 0,0 12,15.5A1.5,1.5 0 0,0 13.5,14A1.5,1.5 0 0,0 12,12.5Z';
 
@@ -29,7 +39,9 @@
     collapsedGroups: {},// Свернутые категории { "Любителям манги": true }
     settings: {
       syncLikes: true,   // Учитывать лайки как просмотренное
-      autoMarkOpen: true // Автоматически помечать главу как прочитанную при открытии
+      autoMarkOpen: true, // Автоматически помечать главу как прочитанную при открытии
+      tabOrder: ['watching', 'favorite', 'new', 'all', 'completed', 'dropped'],
+      zoom: 100          // Масштаб боковой панели (100%, 110%, 120%, 125%, 130%, 140%, 150%)
     },
     
     // Временное состояние интерфейса (не сохраняется в БД)
@@ -40,7 +52,8 @@
       activeTitle: null,     // Название тайтла, открытого в детальном виде (null = список)
       sortAsc: true,         // Сортировка глав: true - сначала старые (1-10, 11-20), false - новые
       isSyncing: false,      // Флаг активного процесса загрузки всей базы
-      syncProgress: 0
+      syncProgress: 0,
+      tabOrderExpanded: false // По умолчанию свернут порядок вкладок
     }
   };
 
@@ -178,6 +191,12 @@
         if (saved.settings) {
           state.settings = { ...state.settings, ...saved.settings };
         }
+        if (!state.settings.tabOrder || !Array.isArray(state.settings.tabOrder) || state.settings.tabOrder.length === 0) {
+          state.settings.tabOrder = ['watching', 'favorite', 'new', 'all', 'completed', 'dropped'];
+        }
+        if (!state.settings.zoom) {
+          state.settings.zoom = 100;
+        }
         resolve();
       });
     });
@@ -199,6 +218,101 @@
         resolve();
       });
     });
+  }
+
+  // Экспорт прогресса пользователя в файл JSON
+  function exportUserData() {
+    try {
+      const dataToExport = {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        user_data: state.user_data,
+        settings: state.settings
+      };
+      
+      const jsonString = JSON.stringify(dataToExport, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `lightfox_progress_${dateStr}.json`;
+      link.style.display = 'none';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      showNotification('Прогресс экспортирован успешно!');
+    } catch (e) {
+      console.error('Ошибка при экспорте прогресса:', e);
+      showNotification('Не удалось экспортировать прогресс.');
+    }
+  }
+
+  // Импорт прогресса пользователя из файла JSON
+  function importUserData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+      try {
+        const importedData = JSON.parse(e.target.result);
+        
+        // Валидация структуры импортированных данных
+        if (!importedData || typeof importedData !== 'object' || !importedData.user_data) {
+          throw new Error('Некорректная структура файла импорта');
+        }
+        
+        // Перезаписываем данные прогресса и настройки
+        state.user_data = importedData.user_data;
+        if (importedData.settings) {
+          state.settings = { ...state.settings, ...importedData.settings };
+        }
+        
+        await saveStateToStorage();
+        showNotification('Прогресс успешно импортирован!');
+        render();
+      } catch (err) {
+        console.error('Ошибка при импорте прогресса:', err);
+        showNotification('Неверный формат файла. Импорт отклонен.');
+      } finally {
+        // Сбрасываем значение инпута, чтобы можно было загрузить тот же файл повторно
+        event.target.value = '';
+      }
+    };
+    
+    reader.readAsText(file);
+  }
+
+  // Изменение порядка вкладок
+  function moveTab(index, direction) {
+    const newOrder = [...state.settings.tabOrder];
+    const targetIndex = index + direction;
+    if (targetIndex >= 0 && targetIndex < newOrder.length) {
+      const temp = newOrder[index];
+      newOrder[index] = newOrder[targetIndex];
+      newOrder[targetIndex] = temp;
+      
+      state.settings.tabOrder = newOrder;
+      saveStateToStorage();
+      render();
+    }
+  }
+
+  // Изменение порядка вкладок с помощью Drag and Drop
+  function dragAndDropReorder(fromIndex, toIndex) {
+    if (fromIndex === toIndex) return;
+    const newOrder = [...state.settings.tabOrder];
+    const [removed] = newOrder.splice(fromIndex, 1);
+    newOrder.splice(toIndex, 0, removed);
+    
+    state.settings.tabOrder = newOrder;
+    saveStateToStorage();
+    render();
   }
 
   // -------------------------------------------------------------
@@ -451,7 +565,8 @@
     // Иконка лисы (Fox SVG)
     btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="${FOX_SVG_PATH}" /></svg>`;
     
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
       state.ui.open = !state.ui.open;
       const sidebar = document.getElementById('lf-sidebar');
       if (sidebar) {
@@ -475,6 +590,16 @@
     const sidebar = document.createElement('div');
     sidebar.id = 'lf-sidebar';
     sidebar.className = 'lf-dark'; // По умолчанию темная
+    
+    // Применяем масштаб из настроек
+    if (state.settings.zoom) {
+      sidebar.style.zoom = state.settings.zoom / 100;
+    }
+    
+    // Предотвращаем закрытие панели при кликах внутри неё
+    sidebar.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
     
     document.body.appendChild(sidebar);
     detectAndApplyTheme();
@@ -588,6 +713,12 @@
             <h1 class="lf-title">LightFox Boosty Bookmark</h1>
           </div>
           <div class="lf-header-buttons">
+            <!-- Кнопка настроек -->
+            <button id="lf-settings-btn" class="lf-btn-icon ${state.ui.activeTab === 'settings' ? 'lf-active' : ''}" title="Настройки">
+              <svg viewBox="0 0 24 24">
+                <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.47,5.34 14.86,5.08L14.47,2.42C14.43,2.18 14.22,2 13.97,2H9.97C9.72,2 9.51,2.18 9.47,2.42L9.08,5.08C8.47,5.34 7.9,5.66 7.38,6.05L4.89,5.05C4.67,4.96 4.4,5.05 4.28,5.27L2.28,8.73C2.16,8.95 2.21,9.22 2.4,9.37L4.51,11C4.47,11.34 4.45,11.67 4.45,12C4.45,12.33 4.47,12.65 4.51,12.97L2.4,14.63C2.21,14.78 2.16,15.05 2.28,15.27L4.28,18.73C4.4,18.95 4.67,19.04 4.89,18.95L7.38,17.95C7.9,18.34 8.47,18.66 9.08,18.92L9.47,21.58C9.51,21.82 9.72,22 9.97,22H13.97C14.22,22 14.43,21.82 14.47,21.58L14.86,18.92C15.47,18.66 16.04,18.34 16.56,17.95L19.05,18.95C19.27,19.04 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
+              </svg>
+            </button>
             <!-- Кнопка синхронизации -->
             <button id="lf-sync-btn" class="lf-btn-icon" title="Синхронизировать базу постов">
               <svg viewBox="0 0 24 24">
@@ -598,8 +729,8 @@
         </div>
         <div class="lf-stats">Тайтлов: ${uniqueTagCount} | Записей: ${state.posts.length}</div>
         
-        <!-- Строка поиска (отображается только в списке) -->
-        ${!state.ui.activeTitle ? `
+        <!-- Строка поиска (отображается только в списке и не на вкладке настроек) -->
+        ${(!state.ui.activeTitle && state.ui.activeTab !== 'settings') ? `
           <div class="lf-search-container">
             <svg class="lf-search-icon" viewBox="0 0 24 24">
               <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
@@ -612,12 +743,9 @@
       <!-- Вкладки (только в списке) -->
       ${!state.ui.activeTitle ? `
         <div class="lf-tabs">
-          <button class="lf-tab-btn ${state.ui.activeTab === 'watching' ? 'lf-active' : ''}" data-tab="watching">Смотрю</button>
-          <button class="lf-tab-btn ${state.ui.activeTab === 'favorite' ? 'lf-active' : ''}" data-tab="favorite">Избранное</button>
-          <button class="lf-tab-btn ${state.ui.activeTab === 'new' ? 'lf-active' : ''}" data-tab="new">Новые</button>
-          <button class="lf-tab-btn ${state.ui.activeTab === 'all' ? 'lf-active' : ''}" data-tab="all">Все</button>
-          <button class="lf-tab-btn ${state.ui.activeTab === 'completed' ? 'lf-active' : ''}" data-tab="completed">Пройдено</button>
-          <button class="lf-tab-btn ${state.ui.activeTab === 'dropped' ? 'lf-active' : ''}" data-tab="dropped">Брошено</button>
+          ${state.settings.tabOrder.map(tabKey => `
+            <button class="lf-tab-btn ${state.ui.activeTab === tabKey ? 'lf-active' : ''}" data-tab="${tabKey}">${TAB_NAMES[tabKey] || tabKey}</button>
+          `).join('')}
         </div>
       ` : ''}
 
@@ -629,21 +757,30 @@
     // Подключаем события хедера
     document.getElementById('lf-sync-btn').addEventListener('click', performFullSync);
     
+    const settingsBtn = document.getElementById('lf-settings-btn');
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        state.ui.activeTitle = null;
+        state.ui.activeTab = 'settings';
+        render();
+      });
+    }
+    
     if (!state.ui.activeTitle) {
       const searchInput = document.getElementById('lf-search');
-      searchInput.addEventListener('input', (e) => {
-        state.ui.searchQuery = e.target.value;
-        renderListContent();
-      });
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          state.ui.searchQuery = e.target.value;
+          renderListContent();
+        });
+      }
       
       // Вкладки
       const tabButtons = sidebar.querySelectorAll('.lf-tab-btn');
       tabButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
           state.ui.activeTab = e.target.dataset.tab;
-          tabButtons.forEach(b => b.classList.remove('lf-active'));
-          e.target.classList.add('lf-active');
-          renderListContent();
+          render();
         });
       });
       
@@ -653,12 +790,251 @@
     }
   }
 
+  // Отрисовка вкладки настроек
+  function renderSettingsContent() {
+    const container = document.getElementById('lf-body-content');
+    if (!container) return;
+    
+    container.innerHTML = `
+      <div class="lf-settings-container">
+        <!-- Резервное копирование -->
+        <div class="lf-settings-section">
+          <h3 class="lf-settings-title">Синхронизация и бэкап</h3>
+          <div class="lf-settings-desc" style="margin-bottom: 12px;">
+            Экспортируйте ваш прогресс в JSON-файл для резервного копирования или переноса на другое устройство.
+          </div>
+          <div class="lf-settings-buttons">
+            <button id="lf-export-btn" class="lf-btn-secondary">
+              <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor; margin-right: 4px;">
+                <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
+              </svg>
+              Экспорт
+            </button>
+            
+            <button id="lf-import-btn" class="lf-btn-primary">
+              <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor; margin-right: 4px;">
+                <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
+              </svg>
+              Импорт
+            </button>
+            <input type="file" id="lf-import-input" accept=".json" style="display: none;">
+          </div>
+        </div>
+
+        <!-- Параметры отслеживания -->
+        <div class="lf-settings-section">
+          <h3 class="lf-settings-title">Настройки отслеживания</h3>
+          
+          <div class="lf-settings-row">
+            <label class="lf-settings-label" for="lf-setting-sync-likes">
+              Синхронизация по лайкам
+              <div class="lf-settings-desc">Считать лайкнутые посты на Boosty прослушанными главами.</div>
+            </label>
+            <input type="checkbox" id="lf-setting-sync-likes" class="lf-settings-checkbox" ${state.settings.syncLikes ? 'checked' : ''}>
+          </div>
+
+          <div class="lf-settings-row">
+            <label class="lf-settings-label" for="lf-setting-auto-mark">
+              Автоотметка при открытии
+              <div class="lf-settings-desc">Автоматически помечать главу как прочитанную при переходе по ссылке.</div>
+            </label>
+            <input type="checkbox" id="lf-setting-auto-mark" class="lf-settings-checkbox" ${state.settings.autoMarkOpen ? 'checked' : ''}>
+          </div>
+        </div>
+
+        <!-- Внешний вид -->
+        <div class="lf-settings-section">
+          <h3 class="lf-settings-title">Интерфейс</h3>
+          
+          <div class="lf-settings-row">
+            <label class="lf-settings-label" for="lf-setting-zoom">
+              Масштаб боковой панели
+              <div class="lf-settings-desc">Настройте удобный размер текста и элементов интерфейса.</div>
+            </label>
+            <select id="lf-setting-zoom" class="lf-settings-select">
+              <option value="100" ${state.settings.zoom === 100 ? 'selected' : ''}>100%</option>
+              <option value="110" ${state.settings.zoom === 110 ? 'selected' : ''}>110%</option>
+              <option value="120" ${state.settings.zoom === 120 ? 'selected' : ''}>120%</option>
+              <option value="125" ${state.settings.zoom === 125 ? 'selected' : ''}>125%</option>
+              <option value="130" ${state.settings.zoom === 130 ? 'selected' : ''}>130%</option>
+              <option value="140" ${state.settings.zoom === 140 ? 'selected' : ''}>140%</option>
+              <option value="150" ${state.settings.zoom === 150 ? 'selected' : ''}>150%</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Порядок вкладок -->
+        <div class="lf-settings-section lf-collapsible ${state.ui.tabOrderExpanded ? 'lf-expanded' : ''}">
+          <div class="lf-settings-section-header" id="lf-toggle-tab-order">
+            <h3 class="lf-settings-title" style="margin: 0;">Порядок вкладок</h3>
+            <svg class="lf-collapse-arrow" viewBox="0 0 24 24">
+              <path d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z" />
+            </svg>
+          </div>
+          <div class="lf-settings-section-body">
+            <div class="lf-settings-desc" style="margin-bottom: 12px;">
+              Настройте расположение вкладок категорий в боковой панели с помощью перетаскивания (Drag & Drop) за иконку или стрелок.
+            </div>
+            <div class="lf-tab-order-list">
+              ${state.settings.tabOrder.map((tabKey, idx) => `
+                <div class="lf-tab-order-item" data-index="${idx}">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="lf-drag-handle" title="Перетащить">
+                      <svg viewBox="0 0 24 24">
+                        <path d="M9,3H11V5H9V3M13,3H15V5H13V3M9,7H11V9H9V7M13,7H15V9H13V7M9,11H11V13H9V11M13,11H15V13H13V11M9,15H11V17H9V15M13,15H15V17H13V15M9,19H11V21H9V19M13,19H15V21H13V19Z" />
+                      </svg>
+                    </div>
+                    <span class="lf-tab-order-name">${TAB_NAMES[tabKey] || tabKey}</span>
+                  </div>
+                  <div class="lf-tab-order-btns">
+                    <button class="lf-tab-order-btn lf-tab-up" data-index="${idx}" ${idx === 0 ? 'disabled' : ''} title="Вверх">▲</button>
+                    <button class="lf-tab-order-btn lf-tab-down" data-index="${idx}" ${idx === state.settings.tabOrder.length - 1 ? 'disabled' : ''} title="Вниз">▼</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Инфо о расширении -->
+        <div class="lf-settings-section" style="font-size: 11px; color: var(--lf-text-muted); line-height: 1.5;">
+          <div><strong>Название:</strong> LightFox Boosty Bookmark</div>
+          <div><strong>Версия:</strong> 1.0</div>
+          <div style="margin-top: 8px;">Разработано для быстрого и удобного отслеживания глав на странице автора lightfoxmanga.</div>
+        </div>
+      </div>
+    `;
+
+    // Подключение событий кнопок экспорта/импорта
+    document.getElementById('lf-export-btn').addEventListener('click', exportUserData);
+    
+    const importBtn = document.getElementById('lf-import-btn');
+    const importInput = document.getElementById('lf-import-input');
+    importBtn.addEventListener('click', () => importInput.click());
+    importInput.addEventListener('change', importUserData);
+
+    // Подключение событий чекбоксов
+    const syncLikesCheckbox = document.getElementById('lf-setting-sync-likes');
+    syncLikesCheckbox.addEventListener('change', (e) => {
+      state.settings.syncLikes = e.target.checked;
+      saveStateToStorage();
+      showNotification(e.target.checked ? 'Синхронизация по лайкам включена' : 'Синхронизация по лайкам отключена');
+    });
+
+    const autoMarkCheckbox = document.getElementById('lf-setting-auto-mark');
+    autoMarkCheckbox.addEventListener('change', (e) => {
+      state.settings.autoMarkOpen = e.target.checked;
+      saveStateToStorage();
+      showNotification(e.target.checked ? 'Автоотметка включена' : 'Автоотметка отключена');
+    });
+
+    // Подключение событий выбора масштаба
+    const zoomSelect = document.getElementById('lf-setting-zoom');
+    if (zoomSelect) {
+      zoomSelect.addEventListener('change', (e) => {
+        const newZoom = parseInt(e.target.value);
+        state.settings.zoom = newZoom;
+        saveStateToStorage();
+        
+        const sidebar = document.getElementById('lf-sidebar');
+        if (sidebar) {
+          sidebar.style.zoom = newZoom / 100;
+        }
+        
+        showNotification(`Масштаб изменен на ${newZoom}%`);
+        render();
+      });
+    }
+
+    // Подключение событий изменения порядка вкладок
+    container.querySelectorAll('.lf-tab-up').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.target.dataset.index);
+        moveTab(idx, -1);
+      });
+    });
+
+    container.querySelectorAll('.lf-tab-down').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.target.dataset.index);
+        moveTab(idx, 1);
+      });
+    });
+
+    // Подключение Drag and Drop для порядка вкладок
+    let draggedIndex = null;
+    const dragItems = container.querySelectorAll('.lf-tab-order-item');
+    
+    dragItems.forEach(item => {
+      const handle = item.querySelector('.lf-drag-handle');
+      
+      // Делаем элемент перетаскиваемым только при зажатии ручки
+      handle.addEventListener('mousedown', () => {
+        item.draggable = true;
+      });
+      
+      handle.addEventListener('mouseup', () => {
+        item.draggable = false;
+      });
+      
+      item.addEventListener('dragstart', (e) => {
+        draggedIndex = parseInt(item.dataset.index);
+        item.classList.add('lf-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', draggedIndex);
+      });
+
+      item.addEventListener('dragend', () => {
+        item.classList.remove('lf-dragging');
+        item.draggable = false;
+        dragItems.forEach(i => i.classList.remove('lf-drag-over'));
+      });
+
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        return false;
+      });
+
+      item.addEventListener('dragenter', () => {
+        item.classList.add('lf-drag-over');
+      });
+
+      item.addEventListener('dragleave', () => {
+        item.classList.remove('lf-drag-over');
+      });
+
+      item.addEventListener('drop', (e) => {
+        e.stopPropagation();
+        const targetIndex = parseInt(item.dataset.index);
+        if (draggedIndex !== null && draggedIndex !== targetIndex) {
+          dragAndDropReorder(draggedIndex, targetIndex);
+        }
+        return false;
+      });
+    });
+
+    // Переключатель сворачивания порядка вкладок
+    const toggleHeader = document.getElementById('lf-toggle-tab-order');
+    if (toggleHeader) {
+      toggleHeader.addEventListener('click', () => {
+        state.ui.tabOrderExpanded = !state.ui.tabOrderExpanded;
+        render();
+      });
+    }
+  }
+
   // -------------------------------------------------------------
   // ОТРИСОВКА СПИСКА ТАЙТЛОВ
   // -------------------------------------------------------------
   function renderListContent() {
     const container = document.getElementById('lf-body-content');
     if (!container) return;
+    
+    if (state.ui.activeTab === 'settings') {
+      renderSettingsContent();
+      return;
+    }
     
     if (state.posts.length === 0) {
       container.innerHTML = `
