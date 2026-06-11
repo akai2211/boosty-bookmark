@@ -24,6 +24,16 @@
         "styles.css"
       ],
       "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "https://boosty.to/*"
+      ],
+      "js": [
+        "page_script.js"
+      ],
+      "run_at": "document_end",
+      "world": "MAIN"
     }
   ]
 }

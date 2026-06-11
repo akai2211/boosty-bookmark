@@ -64,6 +64,9 @@
     if (eventHandlers.originalPushState) history.pushState = eventHandlers.originalPushState;
     if (eventHandlers.originalReplaceState) history.replaceState = eventHandlers.originalReplaceState;
 
+    // Удаляем слушатель сообщений от page_script.js
+    if (eventHandlers.messageHandler) window.removeEventListener('message', eventHandlers.messageHandler);
+
     // Удаляем внедрённые DOM-элементы
     const btn = document.getElementById('lf-trigger-btn');
     const sidebar = document.getElementById('lf-sidebar');
@@ -150,6 +153,68 @@
     }
   }
 
+  // Слушатель сообщений от page_script.js (main world) для перехвата лайков
+  function patchFetch() {
+    eventHandlers.messageHandler = (event) => {
+      // Принимаем сообщения только от нашего page_script.js
+      if (event.source !== window) return;
+      if (!event.data || event.data.type !== 'LF_REACTION_INTERCEPTED') return;
+      
+      if (!isExtensionContextValid()) return;
+      
+      const { postId, isLiked } = event.data;
+      console.log(`[LightFox content.js] Получено сообщение от page_script: пост ${postId}, isLiked=${isLiked}`);
+      if (postId) {
+        handleInterceptedReaction(postId, isLiked);
+      }
+    };
+    window.addEventListener('message', eventHandlers.messageHandler);
+  }
+
+  // Обработка перехваченного лайка/дизлайка: обновление кэша и UI
+  function handleInterceptedReaction(postId, isLiked) {
+    if (!isExtensionContextValid()) return;
+    
+    const post = state.posts.find(p => String(p.id) === String(postId));
+    if (post && post.isLiked !== isLiked) {
+      post.isLiked = isLiked;
+      
+      // Обновляем кэш в хранилище
+      saveStateToStorage();
+      
+      // Если детальный вид тайтла открыт — обновляем чекбокс точечно, без полного ререндера
+      const checkbox = document.querySelector(`.lf-chapter-checkbox[data-post-id="${postId}"]`);
+      if (checkbox && checkbox.checked !== isLiked) {
+        checkbox.checked = isLiked;
+        if (isLiked) {
+          checkbox.classList.add('lf-liked-checkbox');
+        } else {
+          checkbox.classList.remove('lf-liked-checkbox');
+        }
+        
+        // Обновляем счётчик прогресса в заголовке
+        const activeTitleName = state.ui.activeTitle;
+        if (activeTitleName) {
+          const updatedManga = getGroupedTitles().find(t => t.name === activeTitleName);
+          if (updatedManga) {
+            const headerLabel = document.querySelector('.lf-chapters-header .lf-field-label');
+            if (headerLabel) {
+              headerLabel.textContent = `Список глав (${updatedManga.readCount}/${updatedManga.posts.length})`;
+            }
+          }
+        }
+      } else if (!checkbox) {
+        // Если мы не в детальном виде — делаем мягкий ререндер списка для обновления индикаторов
+        const bodyContent = document.getElementById('lf-body-content');
+        if (bodyContent && !state.ui.activeTitle) {
+          renderListContent();
+        }
+      }
+      
+      console.log(`[LightFox] Перехвачен лайк на Boosty: пост ${postId} — кэш обновлён`);
+    }
+  }
+
   // Перехват истории переходов SPA (React Router / HTML5 History API)
   function patchHistory() {
     eventHandlers.originalPushState = history.pushState;
@@ -200,7 +265,8 @@
       state.lastVisit = now - 24 * 60 * 60 * 1000; // Если первый раз, считаем что последний визит был день назад
     }
     
-    // Настраиваем перехват навигации SPA
+    // Настраиваем перехват навигации SPA и fetch-запросов
+    patchFetch();
     patchHistory();
     
     // Запускаем периодическую проверку URL
@@ -403,6 +469,54 @@
   // ЛОГИКА СИНХРОНИЗАЦИИ И АНАЛИЗА API
   // -------------------------------------------------------------
 
+  // Попытка программного клика по кнопке лайка в DOM (если пост отрендерен на странице)
+  function syncDomLike(postId, targetLikedState) {
+    try {
+      // Ищем ссылки на пост ТОЛЬКО на основной странице (вне нашего sidebar)
+      const allLinks = document.querySelectorAll(`a[href*="/posts/${postId}"]`);
+      let pageLink = null;
+      const sidebar = document.getElementById('lf-sidebar');
+      
+      for (const link of allLinks) {
+        if (sidebar && sidebar.contains(link)) continue; // Пропускаем ссылки из нашего расширения
+        pageLink = link;
+        break;
+      }
+      
+      if (!pageLink) return false;
+
+      let current = pageLink;
+      let likeBtn = null;
+      let maxDepth = 15; 
+      
+      while (current && current !== document.body && maxDepth > 0) {
+        current = current.parentElement;
+        maxDepth--;
+        
+        const btns = current.querySelectorAll('[data-test-id="COMMON_REACTIONS_REACTIONSPOST:ROOT"]');
+        if (btns.length === 1) {
+          likeBtn = btns[0];
+          break;
+        }
+      }
+
+      if (likeBtn) {
+        const isCurrentlyLiked = likeBtn.getAttribute('data-active') === 'true';
+        if (isCurrentlyLiked !== targetLikedState) {
+          likeBtn.click();
+          console.log(`[LightFox] DOM-клик лайка для поста ${postId}`);
+          return true;
+        } else {
+          // Уже в нужном состоянии
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn('Ошибка при поиске кнопки лайка в DOM:', e);
+    }
+    return false;
+  }
+
   // Получение токена авторизации Boosty из localStorage
   function getBoostyAuthToken() {
     try {
@@ -448,6 +562,42 @@
       
     } catch (e) {
       console.warn('Не удалось отправить реакцию на Boosty:', e);
+    }
+  }
+
+  // Удаление лайка (реакции) с поста на Boosty
+  async function removeBoostyReaction(postId) {
+    const token = getBoostyAuthToken();
+    if (!token) {
+      console.warn('Не удалось снять лайк на Boosty: токен авторизации отсутствует.');
+      return;
+    }
+    
+    try {
+      const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/${postId}/reaction?from_page=blog`;
+      
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.warn(`Не удалось снять лайк на Boosty (статус ${response.status}):`, text);
+        return;
+      }
+      
+      console.log(`Лайк успешно снят на Boosty для поста ${postId}`);
+      
+      // Обновляем локальный кэш поста
+      const post = state.posts.find(p => String(p.id) === String(postId));
+      if (post) post.isLiked = false;
+      
+    } catch (e) {
+      console.warn('Не удалось снять реакцию на Boosty:', e);
     }
   }
 
@@ -1526,10 +1676,11 @@
       // Клик по чекбоксу
       const checkbox = row.querySelector('.lf-chapter-checkbox');
       checkbox.addEventListener('change', (e) => {
-        if (e.target.classList.contains('lf-liked-checkbox')) {
-          e.preventDefault();
-          e.target.checked = true; // Возвращаем галочку, если как-то смогли кликнуть
-          return;
+        // Мы больше не блокируем снятие галочки для пролайканных постов
+        if (e.target.classList.contains('lf-liked-checkbox') && !e.target.checked) {
+          e.target.classList.remove('lf-liked-checkbox');
+        } else if (e.target.checked) {
+          e.target.classList.add('lf-liked-checkbox');
         }
         
         const userData = ensureUserData(manga.name);
@@ -1547,9 +1698,11 @@
         userData.readPosts = readPosts;
         saveStateToStorage();
         
-        // Отправляем лайк на Boosty, если галочка была поставлена
+        // Отправляем или снимаем лайк на Boosty
         if (e.target.checked) {
           sendBoostyReaction(postId);
+        } else {
+          removeBoostyReaction(postId);
         }
         
         // Обновляем циферки прогресса в заголовке

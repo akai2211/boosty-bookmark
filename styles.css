@@ -557,7 +557,7 @@
 }
 
 .lf-liked-checkbox {
-  pointer-events: none;
+  /* pointer-events: none убран, чтобы разрешить отмену лайка */
   opacity: 0.8;
 }
 
