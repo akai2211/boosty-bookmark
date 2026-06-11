@@ -74,10 +74,10 @@
 /* Sidebar Container */
 #lf-sidebar {
   position: fixed;
-  top: 60px;
+  top: 56px;
   right: 0;
   width: 380px;
-  height: calc(100vh - 60px);
+  height: calc(100vh - 56px);
   z-index: 99998;
   background-color: var(--lf-bg);
   border-left: 1px solid var(--lf-border);

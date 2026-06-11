@@ -413,6 +413,44 @@
     }
   }
 
+  // Отправка лайка (реакции) на пост в Boosty
+  async function sendBoostyReaction(postId) {
+    const token = getBoostyAuthToken();
+    if (!token) {
+      console.warn('Не удалось поставить лайк на Boosty: токен авторизации отсутствует.');
+      return;
+    }
+    
+    try {
+      const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/${postId}/reaction?from_page=blog`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({ reaction: 'heart' }),
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.warn(`Не удалось поставить лайк на Boosty (статус ${response.status}):`, text);
+        return;
+      }
+      
+      console.log(`Лайк успешно отправлен на Boosty для поста ${postId}`);
+      
+      // Обновляем локальный кэш поста, чтобы при ререндере он отображался как лайкнутый
+      const post = state.posts.find(p => String(p.id) === String(postId));
+      if (post) post.isLiked = true;
+      
+    } catch (e) {
+      console.warn('Не удалось отправить реакцию на Boosty:', e);
+    }
+  }
+
   // Полная синхронизация всей базы постов
   async function performFullSync() {
     if (state.ui.isSyncing) return;
@@ -1508,6 +1546,11 @@
         
         userData.readPosts = readPosts;
         saveStateToStorage();
+        
+        // Отправляем лайк на Boosty, если галочка была поставлена
+        if (e.target.checked) {
+          sendBoostyReaction(postId);
+        }
         
         // Обновляем циферки прогресса в заголовке
         const updatedManga = getGroupedTitles().find(t => t.name === manga.name);
