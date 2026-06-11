@@ -1,6 +1,8 @@
 /* content.js - Помощник по отслеживанию озвучек на Boosty (LightFox Manga Assistant) */
 
 (function () {
+  'use strict';
+
   const BLOG_SLUG = 'lightfoxmanga';
   const STORAGE_KEY = `lf_state_${BLOG_SLUG}`;
   
@@ -10,6 +12,14 @@
     'объявление', 'анонс', 'опрос', 'стрим', 'аудио', 
     'важная новость', 'новости канала'
   ];
+
+  // SVG-путь иконки лисы (используется в нескольких местах интерфейса)
+  const FOX_SVG_PATH = 'M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12C20,13.72 19.46,15.31 18.55,16.62L17.06,14.65C17.38,13.82 17.2,12.87 16.54,12.21C15.8,11.47 14.65,11.41 13.84,12.03L12,10.19V6H11V10.19L9.16,12.03C8.35,11.41 7.2,11.47 6.46,12.21C5.8,12.87 5.62,13.82 5.94,14.65L4.45,16.62C3.54,15.31 3,13.72 3,12A8,8 0 0,1 12,4M12,12.5A1.5,1.5 0 0,0 10.5,14A1.5,1.5 0 0,0 12,15.5A1.5,1.5 0 0,0 13.5,14A1.5,1.5 0 0,0 12,12.5Z';
+
+  // Экранирование HTML-спецсимволов для безопасной вставки в шаблоны
+  function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
 
   // Глобальное состояние
   let state = {
@@ -34,6 +44,83 @@
     }
   };
 
+  // Инициализация/получение данных пользователя для тайтла (устраняет дублирование)
+  function ensureUserData(titleName) {
+    if (!state.user_data[titleName]) {
+      state.user_data[titleName] = { status: 'none', notes: '', readPosts: [] };
+    }
+    return state.user_data[titleName];
+  }
+
+  // Проверка, является ли текущая страница блогом целевого автора
+  function isTargetPage() {
+    const path = window.location.pathname.toLowerCase();
+    return path === `/${BLOG_SLUG}` || path.startsWith(`/${BLOG_SLUG}/`);
+  }
+
+  // Управление видимостью интерфейса в зависимости от URL
+  async function checkUrlAndToggleVisibility() {
+    const isTarget = isTargetPage();
+    const btn = document.getElementById('lf-trigger-btn');
+    const sidebar = document.getElementById('lf-sidebar');
+    
+    if (isTarget) {
+      if (!btn || !sidebar) {
+        // Создаем элементы интерфейса
+        createTriggerButton();
+        createSidebar();
+        
+        // Запускаем фоновую синхронизацию (проверка новых постов)
+        if (state.posts.length > 0) {
+          backgroundSync();
+        } else {
+          // Если базы вообще нет, показываем интерфейс и предлагаем запустить синхронизацию
+          render();
+        }
+      } else {
+        // Если интерфейс уже есть, просто показываем его
+        btn.style.display = '';
+        sidebar.style.display = '';
+      }
+    } else {
+      // Скрываем интерфейс, если мы ушли на другую страницу
+      if (btn) btn.style.display = 'none';
+      if (sidebar) {
+        sidebar.style.display = 'none';
+        sidebar.classList.remove('lf-open');
+        state.ui.open = false;
+      }
+    }
+  }
+
+  // Перехват истории переходов SPA (React Router / HTML5 History API)
+  function patchHistory() {
+    const pushState = history.pushState;
+    const replaceState = history.replaceState;
+    
+    history.pushState = function () {
+      const result = pushState.apply(this, arguments);
+      window.dispatchEvent(new Event('lf_locationchange'));
+      return result;
+    };
+    
+    history.replaceState = function () {
+      const result = replaceState.apply(this, arguments);
+      window.dispatchEvent(new Event('lf_locationchange'));
+      return result;
+    };
+    
+    window.addEventListener('popstate', () => {
+      window.dispatchEvent(new Event('lf_locationchange'));
+    });
+    
+    window.addEventListener('hashchange', () => {
+      window.dispatchEvent(new Event('lf_locationchange'));
+    });
+    
+    window.addEventListener('lf_locationchange', checkUrlAndToggleVisibility);
+  }
+
   // Инициализация расширения
   async function init() {
     await loadStateFromStorage();
@@ -44,27 +131,38 @@
       state.lastVisit = now - 24 * 60 * 60 * 1000; // Если первый раз, считаем что последний визит был день назад
     }
     
-    // Создаем элементы интерфейса
-    createTriggerButton();
-    createSidebar();
+    // Настраиваем перехват навигации SPA
+    patchHistory();
     
-    // Запускаем фоновую синхронизацию (проверка новых постов)
-    if (state.posts.length > 0) {
-      backgroundSync();
-    } else {
-      // Если базы вообще нет, показываем интерфейс и предлагаем запустить синхронизацию
-      render();
-    }
+    // Запускаем периодическую проверку URL
+    setInterval(checkUrlAndToggleVisibility, 500);
+    
+    // Первичная проверка текущей страницы
+    await checkUrlAndToggleVisibility();
     
     // Слушаем закрытие страницы, чтобы обновить время последнего визита
     window.addEventListener('beforeunload', () => {
       chrome.storage.local.get([STORAGE_KEY], (res) => {
         const data = res[STORAGE_KEY] || {};
-        data.lastVisit = now;
+        data.lastVisit = Date.now();
         const update = {};
         update[STORAGE_KEY] = data;
         chrome.storage.local.set(update);
       });
+    });
+
+    // Слушаем клики по всему документу для автозакрытия панели при клике снаружи
+    document.addEventListener('click', (event) => {
+      const sidebar = document.getElementById('lf-sidebar');
+      const btn = document.getElementById('lf-trigger-btn');
+      
+      if (state.ui.open && sidebar && btn) {
+        // Если клик мимо боковой панели и мимо кнопки-триггера
+        if (!sidebar.contains(event.target) && !btn.contains(event.target)) {
+          state.ui.open = false;
+          sidebar.classList.remove('lf-open');
+        }
+      }
     });
   }
 
@@ -276,11 +374,11 @@
       const userTitleData = state.user_data[title.name] || { status: 'none', notes: '', readPosts: [] };
       
       // Подсчет количества прослушанных постов
-      const readSet = new Set(userTitleData.readPosts || []);
+      const readSet = new Set((userTitleData.readPosts || []).map(String));
       let readCount = 0;
       
       title.posts.forEach(post => {
-        const isRead = readSet.has(post.id) || (state.settings.syncLikes && post.isLiked);
+        const isRead = readSet.has(String(post.id)) || (state.settings.syncLikes && post.isLiked);
         if (isRead) readCount++;
       });
       
@@ -351,11 +449,7 @@
     btn.title = 'Помощник LightFox';
     
     // Иконка лисы (Fox SVG)
-    btn.innerHTML = `
-      <svg viewBox="0 0 24 24">
-        <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12C20,13.72 19.46,15.31 18.55,16.62L17.06,14.65C17.38,13.82 17.2,12.87 16.54,12.21C15.8,11.47 14.65,11.41 13.84,12.03L12,10.19V6H11V10.19L9.16,12.03C8.35,11.41 7.2,11.47 6.46,12.21C5.8,12.87 5.62,13.82 5.94,14.65L4.45,16.62C3.54,15.31 3,13.72 3,12A8,8 0 0,1 12,4M12,12.5A1.5,1.5 0 0,0 10.5,14A1.5,1.5 0 0,0 12,15.5A1.5,1.5 0 0,0 13.5,14A1.5,1.5 0 0,0 12,12.5Z" />
-      </svg>
-    `;
+    btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="${FOX_SVG_PATH}" /></svg>`;
     
     btn.addEventListener('click', () => {
       state.ui.open = !state.ui.open;
@@ -480,14 +574,17 @@
       return;
     }
     
+    // Вычисляем количество уникальных тайтлов до шаблона
+    const uniqueTagCount = new Set(state.posts.flatMap(p =>
+      p.tags.map(t => t.title).filter(t => !TAGS_BLACKLIST.includes(t.toLowerCase()))
+    )).size;
+
     // Общая верстка каркаса
     sidebar.innerHTML = `
       <div class="lf-header">
         <div class="lf-header-top">
           <div class="lf-title-container">
-            <svg class="lf-logo" viewBox="0 0 24 24">
-              <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12C20,13.72 19.46,15.31 18.55,16.62L17.06,14.65C17.38,13.82 17.2,12.87 16.54,12.21C15.8,11.47 14.65,11.41 13.84,12.03L12,10.19V6H11V10.19L9.16,12.03C8.35,11.41 7.2,11.47 6.46,12.21C5.8,12.87 5.62,13.82 5.94,14.65L4.45,16.62C3.54,15.31 3,13.72 3,12A8,8 0 0,1 12,4M12,12.5A1.5,1.5 0 0,0 10.5,14A1.5,1.5 0 0,0 12,15.5A1.5,1.5 0 0,0 13.5,14A1.5,1.5 0 0,0 12,12.5Z" />
-            </svg>
+            <svg class="lf-logo" viewBox="0 0 24 24"><path d="${FOX_SVG_PATH}" /></svg>
             <h1 class="lf-title">LightFox Boosty Bookmark</h1>
           </div>
           <div class="lf-header-buttons">
@@ -499,7 +596,7 @@
             </button>
           </div>
         </div>
-        <div class="lf-stats">Тайтлов: ${new Set(state.posts.flatMap(p => p.tags.map(t => t.title).filter(t => !TAGS_BLACKLIST.includes(t.toLowerCase())))).size} | Записей: ${state.posts.length}</div>
+        <div class="lf-stats">Тайтлов: ${uniqueTagCount} | Записей: ${state.posts.length}</div>
         
         <!-- Строка поиска (отображается только в списке) -->
         ${!state.ui.activeTitle ? `
@@ -507,7 +604,7 @@
             <svg class="lf-search-icon" viewBox="0 0 24 24">
               <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
             </svg>
-            <input type="text" id="lf-search" class="lf-search-input" placeholder="Поиск манги..." value="${state.ui.searchQuery}">
+            <input type="text" id="lf-search" class="lf-search-input" placeholder="Поиск манги..." value="${escapeHtml(state.ui.searchQuery)}">
           </div>
         ` : ''}
       </div>
@@ -566,9 +663,7 @@
     if (state.posts.length === 0) {
       container.innerHTML = `
         <div class="lf-empty-state">
-          <svg viewBox="0 0 24 24">
-            <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12C20,13.72 19.46,15.31 18.55,16.62L17.06,14.65C17.38,13.82 17.2,12.87 16.54,12.21C15.8,11.47 14.65,11.41 13.84,12.03L12,10.19V6H11V10.19L9.16,12.03C8.35,11.41 7.2,11.47 6.46,12.21C5.8,12.87 5.62,13.82 5.94,14.65L4.45,16.62C3.54,15.31 3,13.72 3,12A8,8 0 0,1 12,4M12,12.5A1.5,1.5 0 0,0 10.5,14A1.5,1.5 0 0,0 12,15.5A1.5,1.5 0 0,0 13.5,14A1.5,1.5 0 0,0 12,12.5Z" />
-          </svg>
+          <svg viewBox="0 0 24 24"><path d="${FOX_SVG_PATH}" /></svg>
           <div>База пуста. Пожалуйста, запустите синхронизацию, нажав на кнопку со стрелками вверху.</div>
           <button id="lf-empty-sync-btn" style="padding: 8px 16px; background-color: var(--lf-primary); border: none; border-radius: var(--lf-border-radius); color: #fff; cursor: pointer; font-weight: 600;">Запустить</button>
         </div>
@@ -722,7 +817,7 @@
     row.innerHTML = `
       <div class="lf-manga-info">
         <div class="lf-status-dot lf-${manga.statusColor}" title="${getStatusTooltip(manga.statusColor)}"></div>
-        <span class="lf-manga-title" title="${manga.name}">${manga.name}</span>
+        <span class="lf-manga-title" title="${escapeHtml(manga.name)}">${escapeHtml(manga.name)}</span>
       </div>
       <div class="lf-manga-meta">
         <span class="lf-manga-progress">${manga.readCount}/${manga.posts.length}</span>
@@ -775,7 +870,7 @@
         
         <!-- Заголовок -->
         <h2 class="lf-detail-title">
-          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${manga.name}">${manga.name}</span>
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(manga.name)}">${escapeHtml(manga.name)}</span>
           <a class="lf-detail-link" href="https://boosty.to/lightfoxmanga?media=all&tag=${tagQuery}" target="_blank" title="Открыть тег на Boosty">
             <svg viewBox="0 0 24 24">
               <path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
@@ -798,7 +893,7 @@
         <!-- Блокнот -->
         <div class="lf-notes-container">
           <span class="lf-field-label">Блокнот (Заметки)</span>
-          <textarea class="lf-notes-textarea" id="lf-notes-textarea" placeholder="Напишите здесь важные заметки... (сохраняется автоматически)">${manga.notes}</textarea>
+          <textarea class="lf-notes-textarea" id="lf-notes-textarea" placeholder="Напишите здесь важные заметки... (сохраняется автоматически)">${escapeHtml(manga.notes)}</textarea>
         </div>
         
         <!-- Раздел глав -->
@@ -830,10 +925,7 @@
     const statusSelect = document.getElementById('lf-status-select');
     statusSelect.addEventListener('change', (e) => {
       const newStatus = e.target.value;
-      if (!state.user_data[manga.name]) {
-        state.user_data[manga.name] = { status: 'none', notes: '', readPosts: [] };
-      }
-      state.user_data[manga.name].status = newStatus;
+      ensureUserData(manga.name).status = newStatus;
       saveStateToStorage();
       
       // Показываем уведомление о переносе тайтла
@@ -846,10 +938,7 @@
     // Блокнот
     const notesTextarea = document.getElementById('lf-notes-textarea');
     notesTextarea.addEventListener('input', (e) => {
-      if (!state.user_data[manga.name]) {
-        state.user_data[manga.name] = { status: 'none', notes: '', readPosts: [] };
-      }
-      state.user_data[manga.name].notes = e.target.value;
+      ensureUserData(manga.name).notes = e.target.value;
       debounceSave();
     });
     
@@ -875,21 +964,21 @@
     }
     
     container.innerHTML = '';
-    const readSet = new Set(manga.readPosts);
+    const readSet = new Set((manga.readPosts || []).map(String));
     
     sortedPosts.forEach(post => {
       const row = document.createElement('div');
       row.className = 'lf-chapter-row';
       
       const isLiked = state.settings.syncLikes && post.isLiked;
-      const isChecked = readSet.has(post.id) || isLiked;
+      const isChecked = readSet.has(String(post.id)) || isLiked;
       
       const dateStr = formatDate(post.publishTime);
       
       row.innerHTML = `
         <input type="checkbox" class="lf-chapter-checkbox" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? 'disabled title="Этот пост лайкнут на Boosty"' : ''}>
-        <a class="lf-chapter-title-link" href="https://boosty.to/lightfoxmanga/posts/${post.id}" target="_blank" title="${post.title}">
-          ${post.title}
+        <a class="lf-chapter-title-link" href="https://boosty.to/lightfoxmanga/posts/${post.id}" target="_blank" title="${escapeHtml(post.title)}">
+          ${escapeHtml(post.title)}
         </a>
         <span class="lf-chapter-date">${dateStr}</span>
       `;
@@ -897,12 +986,10 @@
       // Клик по чекбоксу
       const checkbox = row.querySelector('.lf-chapter-checkbox');
       checkbox.addEventListener('change', (e) => {
-        if (!state.user_data[manga.name]) {
-          state.user_data[manga.name] = { status: 'none', notes: '', readPosts: [] };
-        }
+        const userData = ensureUserData(manga.name);
         
-        const postId = e.target.dataset.postId;
-        const readPosts = state.user_data[manga.name].readPosts || [];
+        const postId = String(e.target.dataset.postId);
+        const readPosts = userData.readPosts || [];
         
         if (e.target.checked) {
           if (!readPosts.includes(postId)) readPosts.push(postId);
@@ -911,7 +998,7 @@
           if (index > -1) readPosts.splice(index, 1);
         }
         
-        state.user_data[manga.name].readPosts = readPosts;
+        userData.readPosts = readPosts;
         saveStateToStorage();
         
         // Обновляем циферки прогресса в заголовке

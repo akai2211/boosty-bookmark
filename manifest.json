@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "LightFox Boosty Tracker",
+  "name": "LightFox Boosty Bookmark",
   "version": "1.0",
   "description": "Помощник для отслеживания озвучек манги и прогресса на Boosty автора LightFox.",
   "icons": {
@@ -15,8 +15,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://boosty.to/lightfoxmanga",
-        "https://boosty.to/lightfoxmanga/*"
+        "https://boosty.to/*"
       ],
       "js": [
         "content.js"
