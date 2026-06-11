@@ -31,6 +31,46 @@
     return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  // ID интервала периодической проверки URL (для возможности остановки при инвалидации контекста)
+  let urlCheckIntervalId = null;
+  // Хранилище ссылок на обработчики событий для их корректного удаления в cleanup()
+  let eventHandlers = {};
+
+  // Проверка, жив ли контекст расширения (не был ли он перезагружен/обновлён)
+  function isExtensionContextValid() {
+    try {
+      return !!chrome.runtime && !!chrome.runtime.id;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Полная очистка: удаление DOM-элементов и остановка интервалов осиротевшего скрипта
+  function cleanup() {
+    // Останавливаем периодическую проверку URL
+    if (urlCheckIntervalId) {
+      clearInterval(urlCheckIntervalId);
+      urlCheckIntervalId = null;
+    }
+    
+    // Удаляем слушатели событий
+    if (eventHandlers.popstate) window.removeEventListener('popstate', eventHandlers.popstate);
+    if (eventHandlers.hashchange) window.removeEventListener('hashchange', eventHandlers.hashchange);
+    if (eventHandlers.lfLocationchange) window.removeEventListener('lf_locationchange', eventHandlers.lfLocationchange);
+    if (eventHandlers.beforeunload) window.removeEventListener('beforeunload', eventHandlers.beforeunload);
+    if (eventHandlers.click) document.removeEventListener('click', eventHandlers.click);
+    
+    // Восстанавливаем оригинальные методы history
+    if (eventHandlers.originalPushState) history.pushState = eventHandlers.originalPushState;
+    if (eventHandlers.originalReplaceState) history.replaceState = eventHandlers.originalReplaceState;
+
+    // Удаляем внедрённые DOM-элементы
+    const btn = document.getElementById('lf-trigger-btn');
+    const sidebar = document.getElementById('lf-sidebar');
+    if (btn) btn.remove();
+    if (sidebar) sidebar.remove();
+  }
+
   // Глобальное состояние
   let state = {
     posts: [],          // Кэш постов с API [{id, title, publishTime, tags, subscriptionLevel, isLiked}]
@@ -41,7 +81,7 @@
       syncLikes: true,   // Учитывать лайки как просмотренное
       autoMarkOpen: true, // Автоматически помечать главу как прочитанную при открытии
       tabOrder: ['watching', 'favorite', 'new', 'all', 'completed', 'dropped'],
-      zoom: 100          // Масштаб боковой панели (100%, 110%, 120%, 125%, 130%, 140%, 150%)
+      zoom: 125          // Масштаб боковой панели (100%, 110%, 120%, 125%, 130%, 140%, 150%)
     },
     
     // Временное состояние интерфейса (не сохраняется в БД)
@@ -108,30 +148,42 @@
 
   // Перехват истории переходов SPA (React Router / HTML5 History API)
   function patchHistory() {
-    const pushState = history.pushState;
-    const replaceState = history.replaceState;
+    eventHandlers.originalPushState = history.pushState;
+    eventHandlers.originalReplaceState = history.replaceState;
     
     history.pushState = function () {
-      const result = pushState.apply(this, arguments);
-      window.dispatchEvent(new Event('lf_locationchange'));
+      const result = eventHandlers.originalPushState.apply(this, arguments);
+      if (isExtensionContextValid()) {
+        try { window.dispatchEvent(new Event('lf_locationchange')); } catch(e) {}
+      }
       return result;
     };
     
     history.replaceState = function () {
-      const result = replaceState.apply(this, arguments);
-      window.dispatchEvent(new Event('lf_locationchange'));
+      const result = eventHandlers.originalReplaceState.apply(this, arguments);
+      if (isExtensionContextValid()) {
+        try { window.dispatchEvent(new Event('lf_locationchange')); } catch(e) {}
+      }
       return result;
     };
     
-    window.addEventListener('popstate', () => {
-      window.dispatchEvent(new Event('lf_locationchange'));
-    });
+    eventHandlers.popstate = () => {
+      if (!isExtensionContextValid()) { cleanup(); return; }
+      try { window.dispatchEvent(new Event('lf_locationchange')); } catch(e) {}
+    };
+    window.addEventListener('popstate', eventHandlers.popstate);
     
-    window.addEventListener('hashchange', () => {
-      window.dispatchEvent(new Event('lf_locationchange'));
-    });
+    eventHandlers.hashchange = () => {
+      if (!isExtensionContextValid()) { cleanup(); return; }
+      try { window.dispatchEvent(new Event('lf_locationchange')); } catch(e) {}
+    };
+    window.addEventListener('hashchange', eventHandlers.hashchange);
     
-    window.addEventListener('lf_locationchange', checkUrlAndToggleVisibility);
+    eventHandlers.lfLocationchange = () => {
+      if (!isExtensionContextValid()) { cleanup(); return; }
+      checkUrlAndToggleVisibility();
+    };
+    window.addEventListener('lf_locationchange', eventHandlers.lfLocationchange);
   }
 
   // Инициализация расширения
@@ -148,24 +200,38 @@
     patchHistory();
     
     // Запускаем периодическую проверку URL
-    setInterval(checkUrlAndToggleVisibility, 500);
+    urlCheckIntervalId = setInterval(() => {
+      // При каждом тике проверяем, не инвалидирован ли контекст расширения
+      if (!isExtensionContextValid()) {
+        cleanup();
+        return;
+      }
+      checkUrlAndToggleVisibility();
+    }, 500);
     
     // Первичная проверка текущей страницы
     await checkUrlAndToggleVisibility();
     
     // Слушаем закрытие страницы, чтобы обновить время последнего визита
-    window.addEventListener('beforeunload', () => {
-      chrome.storage.local.get([STORAGE_KEY], (res) => {
-        const data = res[STORAGE_KEY] || {};
-        data.lastVisit = Date.now();
-        const update = {};
-        update[STORAGE_KEY] = data;
-        chrome.storage.local.set(update);
-      });
-    });
+    eventHandlers.beforeunload = () => {
+      if (!isExtensionContextValid()) { cleanup(); return; }
+      try {
+        chrome.storage.local.get([STORAGE_KEY], (res) => {
+          const data = res[STORAGE_KEY] || {};
+          data.lastVisit = Date.now();
+          const update = {};
+          update[STORAGE_KEY] = data;
+          chrome.storage.local.set(update);
+        });
+      } catch (e) {
+        // Контекст инвалидирован — игнорируем
+      }
+    };
+    window.addEventListener('beforeunload', eventHandlers.beforeunload);
 
     // Слушаем клики по всему документу для автозакрытия панели при клике снаружи
-    document.addEventListener('click', (event) => {
+    eventHandlers.click = (event) => {
+      if (!isExtensionContextValid()) { cleanup(); return; }
       const sidebar = document.getElementById('lf-sidebar');
       const btn = document.getElementById('lf-trigger-btn');
       
@@ -176,47 +242,60 @@
           sidebar.classList.remove('lf-open');
         }
       }
-    });
+    };
+    document.addEventListener('click', eventHandlers.click);
   }
 
   // Загрузка состояния из chrome.storage.local
   function loadStateFromStorage() {
     return new Promise((resolve) => {
-      chrome.storage.local.get([STORAGE_KEY], (res) => {
-        const saved = res[STORAGE_KEY] || {};
-        state.posts = saved.posts || [];
-        state.user_data = saved.user_data || {};
-        state.lastVisit = saved.lastVisit || 0;
-        state.collapsedGroups = saved.collapsedGroups || {};
-        if (saved.settings) {
-          state.settings = { ...state.settings, ...saved.settings };
-        }
-        if (!state.settings.tabOrder || !Array.isArray(state.settings.tabOrder) || state.settings.tabOrder.length === 0) {
-          state.settings.tabOrder = ['watching', 'favorite', 'new', 'all', 'completed', 'dropped'];
-        }
-        if (!state.settings.zoom) {
-          state.settings.zoom = 100;
-        }
+      if (!isExtensionContextValid()) { resolve(); return; }
+      try {
+        chrome.storage.local.get([STORAGE_KEY], (res) => {
+          if (chrome.runtime.lastError) { resolve(); return; }
+          const saved = res[STORAGE_KEY] || {};
+          state.posts = saved.posts || [];
+          state.user_data = saved.user_data || {};
+          state.lastVisit = saved.lastVisit || 0;
+          state.collapsedGroups = saved.collapsedGroups || {};
+          if (saved.settings) {
+            state.settings = { ...state.settings, ...saved.settings };
+          }
+          if (!state.settings.tabOrder || !Array.isArray(state.settings.tabOrder) || state.settings.tabOrder.length === 0) {
+            state.settings.tabOrder = ['watching', 'favorite', 'new', 'all', 'completed', 'dropped'];
+          }
+          if (!state.settings.zoom) {
+            state.settings.zoom = 125;
+          }
+          resolve();
+        });
+      } catch (e) {
         resolve();
-      });
+      }
     });
   }
 
   // Сохранение состояния в chrome.storage.local
   function saveStateToStorage() {
     return new Promise((resolve) => {
-      const data = {
-        posts: state.posts,
-        user_data: state.user_data,
-        lastVisit: state.lastVisit,
-        collapsedGroups: state.collapsedGroups,
-        settings: state.settings
-      };
-      const update = {};
-      update[STORAGE_KEY] = data;
-      chrome.storage.local.set(update, () => {
+      if (!isExtensionContextValid()) { resolve(); return; }
+      try {
+        const data = {
+          posts: state.posts,
+          user_data: state.user_data,
+          lastVisit: state.lastVisit,
+          collapsedGroups: state.collapsedGroups,
+          settings: state.settings
+        };
+        const update = {};
+        update[STORAGE_KEY] = data;
+        chrome.storage.local.set(update, () => {
+          if (chrome.runtime.lastError) { resolve(); return; }
+          resolve();
+        });
+      } catch (e) {
         resolve();
-      });
+      }
     });
   }
 
@@ -319,6 +398,16 @@
   // ЛОГИКА СИНХРОНИЗАЦИИ И АНАЛИЗА API
   // -------------------------------------------------------------
 
+  // Получение токена авторизации Boosty из localStorage
+  function getBoostyAuthToken() {
+    try {
+      const authData = JSON.parse(localStorage.getItem('auth') || '{}');
+      return authData.accessToken || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Полная синхронизация всей базы постов
   async function performFullSync() {
     if (state.ui.isSyncing) return;
@@ -340,7 +429,11 @@
         render();
         
         const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/?limit=${limit}` + (offset ? `&offset=${offset}` : '');
-        const response = await fetch(url);
+        const headers = {};
+        const token = getBoostyAuthToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const response = await fetch(url, { headers, credentials: 'include' });
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
         const result = await response.json();
@@ -376,6 +469,7 @@
       
       // Сохраняем в кэш
       state.posts = allPosts;
+      state.collapsedGroups = {};
       state.ui.syncProgress = 100;
       await saveStateToStorage();
       
@@ -395,7 +489,11 @@
   async function backgroundSync() {
     try {
       const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/?limit=40`;
-      const response = await fetch(url);
+      const headers = {};
+      const token = getBoostyAuthToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      
+      const response = await fetch(url, { headers, credentials: 'include' });
       if (!response.ok) return;
       
       const result = await response.json();
@@ -1146,7 +1244,7 @@
   // Отрисовка одной группы тайтлов (выпадающий список)
   function renderGroup(parent, groupName, titles) {
     const groupContainer = document.createElement('div');
-    const isCollapsed = !!state.collapsedGroups[groupName];
+    const isCollapsed = state.collapsedGroups[groupName] !== false;
     groupContainer.className = `lf-group-container ${isCollapsed ? 'lf-collapsed' : ''}`;
     
     const header = document.createElement('div');
@@ -1168,7 +1266,7 @@
         state.collapsedGroups[groupName] = true;
       } else {
         groupContainer.classList.remove('lf-collapsed');
-        delete state.collapsedGroups[groupName];
+        state.collapsedGroups[groupName] = false;
       }
       saveStateToStorage();
     });
@@ -1362,6 +1460,12 @@
       // Клик по чекбоксу
       const checkbox = row.querySelector('.lf-chapter-checkbox');
       checkbox.addEventListener('change', (e) => {
+        if (e.target.classList.contains('lf-liked-checkbox')) {
+          e.preventDefault();
+          e.target.checked = true; // Возвращаем галочку, если как-то смогли кликнуть
+          return;
+        }
+        
         const userData = ensureUserData(manga.name);
         
         const postId = String(e.target.dataset.postId);

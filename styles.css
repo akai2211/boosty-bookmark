@@ -547,8 +547,13 @@
   width: 16px;
   height: 16px;
   cursor: pointer;
-  accent-color: var(--lf-primary);
+  accent-color: var(--lf-color-green);
   flex-shrink: 0;
+}
+
+.lf-liked-checkbox {
+  pointer-events: none;
+  opacity: 0.8;
 }
 
 .lf-chapter-title-link {
