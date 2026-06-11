@@ -81,12 +81,12 @@
       syncLikes: true,   // Учитывать лайки как просмотренное
       autoMarkOpen: true, // Автоматически помечать главу как прочитанную при открытии
       tabOrder: ['watching', 'favorite', 'new', 'all', 'completed', 'dropped'],
-      zoom: 125          // Масштаб боковой панели (100%, 110%, 120%, 125%, 130%, 140%, 150%)
+      zoom: 125,         // Масштаб боковой панели (100%, 110%, 120%, 125%, 130%, 140%, 150%)
+      sidebarOpen: false  // Состояние открытости панели (сохраняется)
     },
     
     // Временное состояние интерфейса (не сохраняется в БД)
     ui: {
-      open: false,
       activeTab: 'watching', // 'watching', 'favorite', 'new', 'all', 'completed', 'dropped'
       searchQuery: '',
       activeTitle: null,     // Название тайтла, открытого в детальном виде (null = список)
@@ -120,11 +120,12 @@
     if (isTarget) {
       if (!btn || !sidebar) {
         // Создаем элементы интерфейса
-        createTriggerButton();
         createSidebar();
+        createTriggerButton();
         
         // Запускаем фоновую синхронизацию (проверка новых постов)
         if (state.posts.length > 0) {
+          render();
           backgroundSync();
         } else {
           // Если базы вообще нет, показываем интерфейс и предлагаем запустить синхронизацию
@@ -140,8 +141,11 @@
       if (btn) btn.style.display = 'none';
       if (sidebar) {
         sidebar.style.display = 'none';
-        sidebar.classList.remove('lf-open');
-        state.ui.open = false;
+        if (sidebar.classList.contains('lf-open')) {
+          sidebar.classList.remove('lf-open');
+          state.settings.sidebarOpen = false;
+          saveStateToStorage();
+        }
       }
     }
   }
@@ -235,11 +239,12 @@
       const sidebar = document.getElementById('lf-sidebar');
       const btn = document.getElementById('lf-trigger-btn');
       
-      if (state.ui.open && sidebar && btn) {
+      if (state.settings.sidebarOpen && sidebar && btn) {
         // Если клик мимо боковой панели и мимо кнопки-триггера
         if (!sidebar.contains(event.target) && !btn.contains(event.target)) {
-          state.ui.open = false;
+          state.settings.sidebarOpen = false;
           sidebar.classList.remove('lf-open');
+          saveStateToStorage();
         }
       }
     };
@@ -665,10 +670,10 @@
     
     btn.addEventListener('click', (event) => {
       event.stopPropagation();
-      state.ui.open = !state.ui.open;
+      state.settings.sidebarOpen = !state.settings.sidebarOpen;
       const sidebar = document.getElementById('lf-sidebar');
       if (sidebar) {
-        if (state.ui.open) {
+        if (state.settings.sidebarOpen) {
           sidebar.classList.add('lf-open');
           // Автоматически определяем текущую тему Boosty при открытии
           detectAndApplyTheme();
@@ -676,6 +681,7 @@
           sidebar.classList.remove('lf-open');
         }
       }
+      saveStateToStorage();
     });
     
     document.body.appendChild(btn);
@@ -688,6 +694,10 @@
     const sidebar = document.createElement('div');
     sidebar.id = 'lf-sidebar';
     sidebar.className = 'lf-dark'; // По умолчанию темная
+    
+    if (state.settings.sidebarOpen) {
+      sidebar.classList.add('lf-open');
+    }
     
     // Применяем масштаб из настроек
     if (state.settings.zoom) {
@@ -823,6 +833,12 @@
                 <path d="M19,8L15,12H18A6,6 0 0,1 12,18C11,18 10.1,17.65 9.35,17L7.9,18.45C9,19.45 10.45,20 12,20A8,8 0 0,0 20,12H23L19,8M6,12A6,6 0 0,1 12,6C13,6 13.9,6.35 14.65,7L16.1,5.55C15,4.55 13.55,4 12,4A8,8 0 0,0 4,12H1L5,16L9,12H6Z" />
               </svg>
             </button>
+            <!-- Кнопка закрытия -->
+            <button id="lf-close-btn" class="lf-btn-icon" title="Закрыть панель">
+              <svg viewBox="0 0 24 24">
+                <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+              </svg>
+            </button>
           </div>
         </div>
         <div class="lf-stats">Тайтлов: ${uniqueTagCount} | Записей: ${state.posts.length}</div>
@@ -861,6 +877,18 @@
         state.ui.activeTitle = null;
         state.ui.activeTab = 'settings';
         render();
+      });
+    }
+
+    const closeBtn = document.getElementById('lf-close-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        state.settings.sidebarOpen = false;
+        const sidebar = document.getElementById('lf-sidebar');
+        if (sidebar) {
+          sidebar.classList.remove('lf-open');
+        }
+        saveStateToStorage();
       });
     }
     
@@ -1450,7 +1478,7 @@
       const dateStr = formatDate(post.publishTime);
       
       row.innerHTML = `
-        <input type="checkbox" class="lf-chapter-checkbox" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? 'disabled title="Этот пост лайкнут на Boosty"' : ''}>
+        <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? 'title="Этот пост лайкнут на Boosty"' : ''}>
         <a class="lf-chapter-title-link" href="https://boosty.to/lightfoxmanga/posts/${post.id}" target="_blank" title="${escapeHtml(post.title)}">
           ${escapeHtml(post.title)}
         </a>
@@ -1494,7 +1522,7 @@
       // Автоматическое помечание как прочитанного при переходе по ссылке
       const link = row.querySelector('.lf-chapter-title-link');
       link.addEventListener('click', () => {
-        if (state.settings.autoMarkOpen && !checkbox.checked && !checkbox.disabled) {
+        if (state.settings.autoMarkOpen && !checkbox.checked && !checkbox.classList.contains('lf-liked-checkbox')) {
           checkbox.checked = true;
           // Инициируем событие change вручную
           checkbox.dispatchEvent(new Event('change'));

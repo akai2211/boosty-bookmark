@@ -74,10 +74,10 @@
 /* Sidebar Container */
 #lf-sidebar {
   position: fixed;
-  top: 0;
+  top: 60px;
   right: 0;
   width: 380px;
-  height: 100vh;
+  height: calc(100vh - 60px);
   z-index: 99998;
   background-color: var(--lf-bg);
   border-left: 1px solid var(--lf-border);
@@ -92,6 +92,11 @@
 
 #lf-sidebar.lf-open {
   transform: translateX(0);
+}
+
+/* Скрываем кнопку вызова при открытой панели */
+#lf-sidebar.lf-open ~ #lf-trigger-btn {
+  display: none !important;
 }
 
 /* Header Area */
@@ -547,7 +552,7 @@
   width: 16px;
   height: 16px;
   cursor: pointer;
-  accent-color: var(--lf-color-green);
+  accent-color: var(--lf-primary);
   flex-shrink: 0;
 }
 
