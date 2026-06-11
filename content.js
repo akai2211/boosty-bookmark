@@ -58,7 +58,6 @@
     if (eventHandlers.hashchange) window.removeEventListener('hashchange', eventHandlers.hashchange);
     if (eventHandlers.lfLocationchange) window.removeEventListener('lf_locationchange', eventHandlers.lfLocationchange);
     if (eventHandlers.beforeunload) window.removeEventListener('beforeunload', eventHandlers.beforeunload);
-    if (eventHandlers.click) document.removeEventListener('click', eventHandlers.click);
     
     // Восстанавливаем оригинальные методы history
     if (eventHandlers.originalPushState) history.pushState = eventHandlers.originalPushState;
@@ -82,15 +81,15 @@
     collapsedGroups: {},// Свернутые категории { "Любителям манги": true }
     settings: {
       syncLikes: true,   // Учитывать лайки как просмотренное
-      autoMarkOpen: true, // Автоматически помечать главу как прочитанную при открытии
-      tabOrder: ['watching', 'favorite', 'new', 'all', 'completed', 'dropped'],
+      autoMarkOpen: false, // Автоматически помечать главу как прочитанную при открытии
+      tabOrder: ['favorite', 'watching', 'new', 'all', 'completed', 'dropped'],
       zoom: 125,         // Масштаб боковой панели (100%, 110%, 120%, 125%, 130%, 140%, 150%)
       sidebarOpen: false  // Состояние открытости панели (сохраняется)
     },
     
     // Временное состояние интерфейса (не сохраняется в БД)
     ui: {
-      activeTab: 'watching', // 'watching', 'favorite', 'new', 'all', 'completed', 'dropped'
+      activeTab: 'favorite', // 'favorite', 'watching', 'new', 'all', 'completed', 'dropped'
       searchQuery: '',
       activeTitle: null,     // Название тайтла, открытого в детальном виде (null = список)
       sortAsc: true,         // Сортировка глав: true - сначала старые (1-10, 11-20), false - новые
@@ -153,19 +152,22 @@
     }
   }
 
-  // Слушатель сообщений от page_script.js (main world) для перехвата лайков
+  // Слушатель сообщений от page_script.js (main world) для перехвата лайков и результатов DOM-кликов
   function patchFetch() {
     eventHandlers.messageHandler = (event) => {
       // Принимаем сообщения только от нашего page_script.js
       if (event.source !== window) return;
-      if (!event.data || event.data.type !== 'LF_REACTION_INTERCEPTED') return;
+      if (!event.data) return;
       
       if (!isExtensionContextValid()) return;
       
-      const { postId, isLiked } = event.data;
-      console.log(`[LightFox content.js] Получено сообщение от page_script: пост ${postId}, isLiked=${isLiked}`);
-      if (postId) {
-        handleInterceptedReaction(postId, isLiked);
+      // Обработка перехваченного лайка/дизлайка с Boosty
+      if (event.data.type === 'LF_REACTION_INTERCEPTED') {
+        const { postId, isLiked } = event.data;
+        console.log(`[LightFox content.js] Получено сообщение от page_script: пост ${postId}, isLiked=${isLiked}`);
+        if (postId) {
+          handleInterceptedReaction(postId, isLiked);
+        }
       }
     };
     window.addEventListener('message', eventHandlers.messageHandler);
@@ -298,23 +300,6 @@
       }
     };
     window.addEventListener('beforeunload', eventHandlers.beforeunload);
-
-    // Слушаем клики по всему документу для автозакрытия панели при клике снаружи
-    eventHandlers.click = (event) => {
-      if (!isExtensionContextValid()) { cleanup(); return; }
-      const sidebar = document.getElementById('lf-sidebar');
-      const btn = document.getElementById('lf-trigger-btn');
-      
-      if (state.settings.sidebarOpen && sidebar && btn) {
-        // Если клик мимо боковой панели и мимо кнопки-триггера
-        if (!sidebar.contains(event.target) && !btn.contains(event.target)) {
-          state.settings.sidebarOpen = false;
-          sidebar.classList.remove('lf-open');
-          saveStateToStorage();
-        }
-      }
-    };
-    document.addEventListener('click', eventHandlers.click);
   }
 
   // Загрузка состояния из chrome.storage.local
@@ -333,7 +318,7 @@
             state.settings = { ...state.settings, ...saved.settings };
           }
           if (!state.settings.tabOrder || !Array.isArray(state.settings.tabOrder) || state.settings.tabOrder.length === 0) {
-            state.settings.tabOrder = ['watching', 'favorite', 'new', 'all', 'completed', 'dropped'];
+            state.settings.tabOrder = ['favorite', 'watching', 'new', 'all', 'completed', 'dropped'];
           }
           if (!state.settings.zoom) {
             state.settings.zoom = 125;
@@ -565,7 +550,7 @@
     }
   }
 
-  // Удаление лайка (реакции) с поста на Boosty
+  // Удаление лайка (реакции) с поста на Boosty (на Boosty это работает как toggle - отправляем тот же POST)
   async function removeBoostyReaction(postId) {
     const token = getBoostyAuthToken();
     if (!token) {
@@ -577,10 +562,12 @@
       const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/${postId}/reaction?from_page=blog`;
       
       const response = await fetch(url, {
-        method: 'DELETE',
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
         },
+        body: new URLSearchParams({ reaction: 'heart' }),
         credentials: 'include'
       });
       
@@ -598,6 +585,140 @@
       
     } catch (e) {
       console.warn('Не удалось снять реакцию на Boosty:', e);
+    }
+  }
+
+  // Сравнение двух постов на равенство для инкрементальной синхронизации
+  function arePostsEqual(p1, p2) {
+    if (p1.title !== p2.title) return false;
+    if (p1.isLiked !== p2.isLiked) return false;
+    
+    const sub1 = p1.subscriptionLevel;
+    const sub2 = p2.subscriptionLevel;
+    if ((sub1 && !sub2) || (!sub1 && sub2)) return false;
+    if (sub1 && sub2 && sub1.id !== sub2.id) return false;
+
+    if (p1.tags.length !== p2.tags.length) return false;
+    const tags1 = p1.tags.map(t => t.id).sort();
+    const tags2 = p2.tags.map(t => t.id).sort();
+    for (let i = 0; i < tags1.length; i++) {
+      if (tags1[i] !== tags2[i]) return false;
+    }
+
+    return true;
+  }
+
+  // Умная инкрементальная синхронизация постов
+  async function performIncrementalSync() {
+    if (state.ui.isSyncing) return;
+    
+    // Если постов вообще нет в базе, сразу запускаем полную синхронизацию
+    if (state.posts.length === 0) {
+      await performFullSync();
+      return;
+    }
+
+    state.ui.isSyncing = true;
+    state.ui.syncProgress = 0;
+    render();
+    
+    const N = 15; // Требуемое количество подряд известных постов с неизмененным состоянием
+    let unchangedStreak = 0;
+    let offset = '';
+    let page = 0;
+    const limit = 100;
+    let stopSync = false;
+    
+    // Создаем карту текущих постов для быстрого поиска и обновления
+    const postMap = new Map(state.posts.map(p => [String(p.id), p]));
+    
+    try {
+      while (!stopSync) {
+        page++;
+        // Показываем условный прогресс
+        state.ui.syncProgress = Math.min(95, page * 15);
+        render();
+        
+        const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/?limit=${limit}` + (offset ? `&offset=${offset}` : '');
+        const headers = {};
+        const token = getBoostyAuthToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const response = await fetch(url, { headers, credentials: 'include' });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const result = await response.json();
+        const pagePosts = result.data || [];
+        
+        if (!pagePosts.length) {
+          break;
+        }
+
+        for (const p of pagePosts) {
+          const fresh = {
+            id: p.id,
+            title: p.title || 'Без названия',
+            publishTime: p.publishTime,
+            isLiked: !!p.isLiked,
+            subscriptionLevel: p.subscriptionLevel ? {
+              name: p.subscriptionLevel.name,
+              id: p.subscriptionLevel.id
+            } : null,
+            tags: (p.tags || []).map(t => ({
+              id: t.id,
+              title: t.title.trim()
+            }))
+          };
+
+          const existing = postMap.get(String(fresh.id));
+
+          if (existing) {
+            if (arePostsEqual(existing, fresh)) {
+              unchangedStreak++;
+            } else {
+              unchangedStreak = 0;
+              postMap.set(String(fresh.id), fresh); // обновляем измененный пост
+            }
+          } else {
+            unchangedStreak = 0;
+            postMap.set(String(fresh.id), fresh); // добавляем новый пост
+          }
+
+          if (unchangedStreak >= N) {
+            stopSync = true;
+            break;
+          }
+        }
+        
+        const extra = result.extra || {};
+        if (extra.isLast || stopSync) {
+          break;
+        }
+        offset = extra.offset || '';
+        
+        // Небольшая задержка, чтобы не спамить сервер
+        await new Promise(r => setTimeout(r, 150));
+      }
+      
+      // Преобразуем карту обратно в отсортированный массив
+      const updatedPosts = Array.from(postMap.values());
+      updatedPosts.sort((a, b) => b.publishTime - a.publishTime);
+      
+      state.posts = updatedPosts;
+      state.ui.syncProgress = 100;
+      await saveStateToStorage();
+      
+      // Сбрасываем свернутые группы, чтобы отразить новые/обновленные посты
+      state.collapsedGroups = {};
+      
+      showNotification('Синхронизация завершена успешно!');
+      
+    } catch (e) {
+      console.error('Ошибка инкрементальной синхронизации Boosty:', e);
+      showNotification('Ошибка при синхронизации постов. Попробуйте еще раз.');
+    } finally {
+      state.ui.isSyncing = false;
+      render();
     }
   }
 
@@ -887,9 +1008,9 @@
       sidebar.classList.add('lf-open');
     }
     
-    // Применяем масштаб из настроек
+    // Применяем масштаб из настроек через CSS-переменную
     if (state.settings.zoom) {
-      sidebar.style.zoom = state.settings.zoom / 100;
+      sidebar.style.setProperty('--lf-zoom', state.settings.zoom / 100);
     }
     
     // Предотвращаем закрытие панели при кликах внутри неё
@@ -1016,15 +1137,15 @@
               </svg>
             </button>
             <!-- Кнопка синхронизации -->
-            <button id="lf-sync-btn" class="lf-btn-icon" title="Синхронизировать базу постов">
+            <button id="lf-sync-btn" class="lf-btn-icon" title="Синхронизировать новые посты">
               <svg viewBox="0 0 24 24">
                 <path d="M19,8L15,12H18A6,6 0 0,1 12,18C11,18 10.1,17.65 9.35,17L7.9,18.45C9,19.45 10.45,20 12,20A8,8 0 0,0 20,12H23L19,8M6,12A6,6 0 0,1 12,6C13,6 13.9,6.35 14.65,7L16.1,5.55C15,4.55 13.55,4 12,4A8,8 0 0,0 4,12H1L5,16L9,12H6Z" />
               </svg>
             </button>
             <!-- Кнопка закрытия -->
-            <button id="lf-close-btn" class="lf-btn-icon" title="Закрыть панель">
+            <button id="lf-close-btn" class="lf-btn-icon" title="Свернуть панель">
               <svg viewBox="0 0 24 24">
-                <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+                <path d="M8.59,16.59L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.59Z" />
               </svg>
             </button>
           </div>
@@ -1057,7 +1178,7 @@
     `;
 
     // Подключаем события хедера
-    document.getElementById('lf-sync-btn').addEventListener('click', performFullSync);
+    document.getElementById('lf-sync-btn').addEventListener('click', performIncrementalSync);
     
     const settingsBtn = document.getElementById('lf-settings-btn');
     if (settingsBtn) {
@@ -1117,7 +1238,7 @@
           <div class="lf-settings-desc" style="margin-bottom: 12px;">
             Экспортируйте ваш прогресс в JSON-файл для резервного копирования или переноса на другое устройство.
           </div>
-          <div class="lf-settings-buttons">
+          <div class="lf-settings-buttons" style="margin-bottom: 16px;">
             <button id="lf-export-btn" class="lf-btn-secondary">
               <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor; margin-right: 4px;">
                 <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
@@ -1132,6 +1253,18 @@
               Импорт
             </button>
             <input type="file" id="lf-import-input" accept=".json" style="display: none;">
+          </div>
+          
+          <div class="lf-settings-desc" style="margin-bottom: 12px;">
+            Если база отображается некорректно или вы хотите полностью обновить все посты автора с самого начала, запустите полную принудительную синхронизацию.
+          </div>
+          <div class="lf-settings-buttons">
+            <button id="lf-full-sync-btn" class="lf-btn-secondary" style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 6px;">
+              <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor;">
+                <path d="M19,8L15,12H18A6,6 0 0,1 12,18C11,18 10.1,17.65 9.35,17L7.9,18.45C9,19.45 10.45,20 12,20A8,8 0 0,0 20,12H23L19,8M6,12A6,6 0 0,1 12,6C13,6 13.9,6.35 14.65,7L16.1,5.55C15,4.55 13.55,4 12,4A8,8 0 0,0 4,12H1L5,16L9,12H6Z" />
+              </svg>
+              Полная принудительная синхронизация
+            </button>
           </div>
         </div>
 
@@ -1227,6 +1360,15 @@
     importBtn.addEventListener('click', () => importInput.click());
     importInput.addEventListener('change', importUserData);
 
+    // Подключение полной принудительной синхронизации
+    const fullSyncBtn = document.getElementById('lf-full-sync-btn');
+    if (fullSyncBtn) {
+      fullSyncBtn.addEventListener('click', () => {
+        state.ui.activeTab = 'favorite'; // Переключаем на вкладку списков, чтобы пользователь сразу видел прогресс
+        performFullSync();
+      });
+    }
+
     // Подключение событий чекбоксов
     const syncLikesCheckbox = document.getElementById('lf-setting-sync-likes');
     syncLikesCheckbox.addEventListener('change', (e) => {
@@ -1252,7 +1394,7 @@
         
         const sidebar = document.getElementById('lf-sidebar');
         if (sidebar) {
-          sidebar.style.zoom = newZoom / 100;
+          sidebar.style.setProperty('--lf-zoom', newZoom / 100);
         }
         
         showNotification(`Масштаб изменен на ${newZoom}%`);
@@ -1572,11 +1714,11 @@
         <div class="lf-status-container">
           <span class="lf-field-label">Статус отслеживания</span>
           <select class="lf-status-select" id="lf-status-select">
-            <option value="none" ${manga.status === 'none' ? 'selected' : ''}>Не отслеживаю</option>
-            <option value="watching" ${manga.status === 'watching' ? 'selected' : ''}>Смотрю/Читаю</option>
-            <option value="favorite" ${manga.status === 'favorite' ? 'selected' : ''}>Избранное</option>
-            <option value="completed" ${manga.status === 'completed' ? 'selected' : ''}>Завершено</option>
-            <option value="dropped" ${manga.status === 'dropped' ? 'selected' : ''}>Брошено</option>
+            <option value="none" ${manga.status === 'none' ? 'selected' : ''}>⚪ Не отслеживаю</option>
+            <option value="favorite" ${manga.status === 'favorite' ? 'selected' : ''}>⭐ Избранное</option>
+            <option value="watching" ${manga.status === 'watching' ? 'selected' : ''}>🟡 Смотрю</option>
+            <option value="completed" ${manga.status === 'completed' ? 'selected' : ''}>🟢 Завершено</option>
+            <option value="dropped" ${manga.status === 'dropped' ? 'selected' : ''}>🔴 Брошено</option>
           </select>
         </div>
         
@@ -1698,11 +1840,15 @@
         userData.readPosts = readPosts;
         saveStateToStorage();
         
-        // Отправляем или снимаем лайк на Boosty
+        // Отправляем прямой запрос на обновление лайка на сервере Boosty
         if (e.target.checked) {
           sendBoostyReaction(postId);
+          // Дополнительно отправляем запрос в page_script.js для визуального обновления DOM
+          window.postMessage({ type: 'LF_TOGGLE_LIKE_DOM', postId, isLiked: true }, '*');
         } else {
           removeBoostyReaction(postId);
+          // Дополнительно отправляем запрос в page_script.js для визуального обновления DOM
+          window.postMessage({ type: 'LF_TOGGLE_LIKE_DOM', postId, isLiked: false }, '*');
         }
         
         // Обновляем циферки прогресса в заголовке
