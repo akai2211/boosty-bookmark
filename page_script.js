@@ -112,7 +112,7 @@
    */
   function findReactionButton(postId) {
     const sidebar = document.getElementById('lf-sidebar');
-    const allLinks = document.querySelectorAll(`a[href*="/posts/${postId}"]`);
+    const allLinks = document.querySelectorAll(`a[href*="${postId}" i]`);
 
     for (const link of allLinks) {
       if (sidebar && sidebar.contains(link)) continue;

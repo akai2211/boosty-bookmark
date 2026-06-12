@@ -178,8 +178,15 @@
 }
 
 /* Search Input */
+.lf-search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .lf-search-container {
   position: relative;
+  flex: 1;
 }
 
 .lf-search-input {
@@ -411,7 +418,7 @@
 .lf-group-list {
   display: flex;
   flex-direction: column;
-  max-height: 1000px;
+  max-height: 99999px;
   transition: max-height 0.3s cubic-bezier(0, 1, 0, 1);
   overflow: hidden;
 }

@@ -98,7 +98,8 @@
       zoomMigrated: true, // Флаг выполненной миграции масштаба
       sidebarOpen: false, // Состояние открытости панели (сохраняется)
       openTagsInCurrentTab: true, // Открывать теги в текущей вкладке
-      openChaptersInFeed: true // Искать и открывать главы в ленте тайтла
+      openChaptersInFeed: true, // Искать и открывать главы в ленте тайтла
+      titleSort: 'name_asc' // Сортировка тайтлов: 'name_asc', 'name_desc', 'new_desc', 'new_asc', 'chapters_desc', 'chapters_asc', 'progress_desc', 'progress_asc'
     },
     
     // Временное состояние интерфейса (не сохраняется в БД)
@@ -159,7 +160,7 @@
       attempts++;
 
       // Ищем ссылку на этот пост в ленте
-      const linkElement = document.querySelector(`a[href*="/posts/${postId}"]`);
+      const linkElement = document.querySelector(`a[href*="${postId}" i]`);
       if (linkElement) {
         clearInterval(interval);
 
@@ -175,8 +176,11 @@
         return;
       }
 
-      // Если пост не найден, прокручиваем страницу вниз для триггера бесконечного скролла
-      window.scrollTo(0, document.documentElement.scrollHeight);
+      // Прокручиваем вниз для подгрузки новых постов только после 5 неудачных попыток (~2.5 сек),
+      // чтобы дать странице время на первичный рендеринг без резких прыжков.
+      if (attempts > 5) {
+        window.scrollTo(0, document.documentElement.scrollHeight);
+      }
 
       if (attempts >= maxAttempts) {
         clearInterval(interval);
@@ -621,7 +625,7 @@
   function syncDomLike(postId, targetLikedState) {
     try {
       // Ищем ссылки на пост ТОЛЬКО на основной странице (вне нашего sidebar)
-      const allLinks = document.querySelectorAll(`a[href*="/posts/${postId}"]`);
+      const allLinks = document.querySelectorAll(`a[href*="${postId}" i]`);
       let pageLink = null;
       const sidebar = document.getElementById('lf-sidebar');
       
@@ -1181,7 +1185,7 @@
       
       const userTitleData = state.user_data[title.name] || { status: 'none', notes: '', readPosts: [] };
       
-      // Подсчет количества прослушанных постов
+      // Подсчет количества просмотренных постов
       const readSet = new Set((userTitleData.readPosts || []).map(String));
       let readCount = 0;
       
@@ -1213,7 +1217,7 @@
       }
       
       // Определяем категорию (тир подписки) тайтла на основе подписок его постов
-      let category = 'Все';
+      let category = 'Бесплатные';
       const lowercaseName = title.name.toLowerCase();
       
       let isFullyFinished = false;
@@ -1366,6 +1370,10 @@
         if (dropdown) {
           dropdown.classList.remove('lf-show');
         }
+        const sortDropdown = document.getElementById('lf-sort-dropdown');
+        if (sortDropdown) {
+          sortDropdown.classList.remove('lf-show');
+        }
       }
     });
     
@@ -1513,16 +1521,37 @@
         
         <!-- Строка поиска (отображается только в списке и не на вкладке настроек) -->
         ${(!state.ui.activeTitle && state.ui.activeTab !== 'settings') ? `
-          <div class="lf-search-container">
-            <svg class="lf-search-icon" viewBox="0 0 24 24">
-              <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
-            </svg>
-            <input type="text" id="lf-search" class="lf-search-input" placeholder="Поиск манги..." value="${escapeHtml(state.ui.searchQuery)}">
-            <button id="lf-search-clear" class="lf-search-clear-btn" style="${state.ui.searchQuery ? 'display: flex;' : 'display: none;'}" title="Очистить поиск">
-              <svg viewBox="0 0 24 24">
-                <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+          <div class="lf-search-row">
+            <div class="lf-search-container">
+              <svg class="lf-search-icon" viewBox="0 0 24 24">
+                <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
               </svg>
-            </button>
+              <input type="text" id="lf-search" class="lf-search-input" placeholder="Поиск манги..." value="${escapeHtml(state.ui.searchQuery)}">
+              <button id="lf-search-clear" class="lf-search-clear-btn" style="${state.ui.searchQuery ? 'display: flex;' : 'display: none;'}" title="Очистить поиск">
+                <svg viewBox="0 0 24 24">
+                  <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+                </svg>
+              </button>
+            </div>
+            
+            <!-- Сортировка тайтлов -->
+            <div class="lf-dropdown" id="lf-sort-dropdown-container">
+              <button id="lf-sort-btn" class="lf-btn-icon" title="Сортировка тайтлов">
+                <svg viewBox="0 0 24 24">
+                  <path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" />
+                </svg>
+              </button>
+              <div class="lf-dropdown-content" id="lf-sort-dropdown" style="right: 0; min-width: 190px;">
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'name_asc' ? 'lf-active' : ''}" data-sort="name_asc">По имени (А-Я)</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'name_desc' ? 'lf-active' : ''}" data-sort="name_desc">По имени (Я-А)</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'new_desc' ? 'lf-active' : ''}" data-sort="new_desc">По новизне (сначала новые)</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'new_asc' ? 'lf-active' : ''}" data-sort="new_asc">По новизне (сначала старые)</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'chapters_desc' ? 'lf-active' : ''}" data-sort="chapters_desc">По главам (много)</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'chapters_asc' ? 'lf-active' : ''}" data-sort="chapters_asc">По главам (мало)</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'progress_desc' ? 'lf-active' : ''}" data-sort="progress_desc">По прогрессу (много)</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'progress_asc' ? 'lf-active' : ''}" data-sort="progress_asc">По прогрессу (мало)</button>
+              </div>
+            </div>
           </div>
         ` : ''}
       </div>
@@ -1614,16 +1643,51 @@
       // Дропдаун архива
       const archiveBtn = document.getElementById('lf-archive-btn');
       const archiveDropdown = document.getElementById('lf-archive-dropdown');
+      
+      // Дропдаун сортировки
+      const sortBtn = document.getElementById('lf-sort-btn');
+      const sortDropdown = document.getElementById('lf-sort-dropdown');
+
       if (archiveBtn && archiveDropdown) {
         archiveBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           archiveDropdown.classList.toggle('lf-show');
+          if (sortDropdown) {
+            sortDropdown.classList.remove('lf-show');
+          }
         });
       }
 
-      // Элементы дропдауна
-      const dropdownItems = sidebar.querySelectorAll('.lf-dropdown-item');
-      dropdownItems.forEach(item => {
+      if (sortBtn && sortDropdown) {
+        sortBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          sortDropdown.classList.toggle('lf-show');
+          if (archiveDropdown) {
+            archiveDropdown.classList.remove('lf-show');
+          }
+        });
+
+        // Клик по элементам сортировки
+        const sortItems = sortDropdown.querySelectorAll('.lf-dropdown-item');
+        sortItems.forEach(item => {
+          item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            state.settings.titleSort = e.currentTarget.dataset.sort;
+            saveStateToStorage();
+            sortDropdown.classList.remove('lf-show');
+            
+            // Обновляем активный класс
+            sortItems.forEach(si => si.classList.remove('lf-active'));
+            e.currentTarget.classList.add('lf-active');
+            
+            renderListContent();
+          });
+        });
+      }
+
+      // Элементы дропдауна архива
+      const archiveItems = archiveDropdown ? archiveDropdown.querySelectorAll('.lf-dropdown-item') : [];
+      archiveItems.forEach(item => {
         item.addEventListener('click', (e) => {
           e.stopPropagation();
           state.ui.activeTab = e.currentTarget.dataset.tab;
@@ -1690,7 +1754,7 @@
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-sync-likes">
               Синхронизация по лайкам
-              <div class="lf-settings-desc">Считать лайкнутые посты на Boosty прослушанными главами.</div>
+              <div class="lf-settings-desc">Считать лайкнутые посты на Boosty просмотренными главами.</div>
             </label>
             <input type="checkbox" id="lf-setting-sync-likes" class="lf-settings-checkbox" ${state.settings.syncLikes ? 'checked' : ''}>
           </div>
@@ -1714,7 +1778,7 @@
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-auto-mark">
               Автоотметка при открытии
-              <div class="lf-settings-desc">Автоматически помечать главу как прочитанную при переходе по ссылке.</div>
+              <div class="lf-settings-desc">Автоматически помечать главу как просмотренную при переходе по ссылке.</div>
             </label>
             <input type="checkbox" id="lf-setting-auto-mark" class="lf-settings-checkbox" ${state.settings.autoMarkOpen ? 'checked' : ''}>
           </div>
@@ -2083,8 +2147,54 @@
       }
     });
     
-    // Сортировка по алфавиту
-    filtered.sort((a, b) => a.name.localeCompare(b.name));
+    // Сортировка тайтлов на основе выбранного режима
+    const sortType = state.settings.titleSort || 'name_asc';
+    filtered.sort((a, b) => {
+      switch (sortType) {
+        case 'name_asc':
+          return a.name.localeCompare(b.name);
+        case 'name_desc':
+          return b.name.localeCompare(a.name);
+        case 'new_desc': {
+          const aTime = a.posts.length > 0 ? a.posts[a.posts.length - 1].publishTime : 0;
+          const bTime = b.posts.length > 0 ? b.posts[b.posts.length - 1].publishTime : 0;
+          return bTime - aTime;
+        }
+        case 'new_asc': {
+          const aTime = a.posts.length > 0 ? a.posts[a.posts.length - 1].publishTime : 0;
+          const bTime = b.posts.length > 0 ? b.posts[b.posts.length - 1].publishTime : 0;
+          return aTime - bTime;
+        }
+        case 'chapters_desc':
+          return b.posts.length - a.posts.length;
+        case 'chapters_asc':
+          return a.posts.length - b.posts.length;
+        case 'progress_desc': {
+          if (b.readCount !== a.readCount) {
+            return b.readCount - a.readCount;
+          }
+          const aPercent = a.posts.length > 0 ? a.readCount / a.posts.length : 0;
+          const bPercent = b.posts.length > 0 ? b.readCount / b.posts.length : 0;
+          if (bPercent !== aPercent) {
+            return bPercent - aPercent;
+          }
+          return a.name.localeCompare(b.name);
+        }
+        case 'progress_asc': {
+          if (a.readCount !== b.readCount) {
+            return a.readCount - b.readCount;
+          }
+          const aPercent = a.posts.length > 0 ? a.readCount / a.posts.length : 0;
+          const bPercent = b.posts.length > 0 ? b.readCount / b.posts.length : 0;
+          if (aPercent !== bPercent) {
+            return aPercent - bPercent;
+          }
+          return a.name.localeCompare(b.name);
+        }
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    });
     
     if (filtered.length === 0) {
       container.innerHTML = `
@@ -2135,6 +2245,7 @@
     
     // Для вкладки «Все» группируем по уровням подписки (категориям)
     const categories = [
+      'Все',
       'Полностью озвучено',
       'Завершен том',
       'Любителям ютуба',
@@ -2143,12 +2254,14 @@
       'Любителям пика',
       'Для шейхов',
       'Лисямбы мои',
-      'Все'
+      'Бесплатные'
     ];
     
     categories.forEach(catName => {
       let catTitles = [];
-      if (catName === 'Полностью озвучено') {
+      if (catName === 'Все') {
+        catTitles = filtered;
+      } else if (catName === 'Полностью озвучено') {
         catTitles = filtered.filter(t => t.isFullyFinished);
       } else if (catName === 'Завершен том') {
         catTitles = filtered.filter(t => t.isVolumeFinished);
@@ -2231,11 +2344,11 @@
 
   function getStatusTooltip(color) {
     switch (color) {
-      case 'green': return 'Прослушано полностью';
-      case 'yellow': return 'Есть непрослушанные главы';
+      case 'green': return 'Просмотрено полностью';
+      case 'yellow': return 'Есть непросмотренные главы';
       case 'red': return 'Брошено';
       case 'grey':
-      default: return 'Прослушивание не начато';
+      default: return 'Просмотр не начат';
     }
   }
 
@@ -2479,7 +2592,7 @@
       // Клик по ссылке на главу
       const link = row.querySelector('.lf-chapter-title-link');
       link.addEventListener('click', (e) => {
-        // Автоматическое помечание как прочитанного при переходе по ссылке
+        // Автоматическое помечание как просмотренного при переходе по ссылке
         if (state.settings.autoMarkOpen && !checkbox.checked && !checkbox.classList.contains('lf-liked-checkbox')) {
           checkbox.checked = true;
           checkbox.dispatchEvent(new Event('change'));
