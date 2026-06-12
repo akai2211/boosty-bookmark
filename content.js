@@ -73,6 +73,7 @@
     if (sidebar) sidebar.remove();
 
     lastScrolledUrl = null;
+    lastScrolledPostId = null;
 
     try {
       sessionStorage.removeItem('lf_active_title');
@@ -96,7 +97,8 @@
       zoom: 1.25,         // Коэффициент масштаба боковой панели (соответствует 100% в UI)
       zoomMigrated: true, // Флаг выполненной миграции масштаба
       sidebarOpen: false, // Состояние открытости панели (сохраняется)
-      openTagsInCurrentTab: true // Открывать теги в текущей вкладке
+      openTagsInCurrentTab: true, // Открывать теги в текущей вкладке
+      openChaptersInFeed: true // Искать и открывать главы в ленте тайтла
     },
     
     // Временное состояние интерфейса (не сохраняется в БД)
@@ -127,10 +129,65 @@
   }
 
   let lastScrolledUrl = null;
+  let lastScrolledPostId = null;
+
+  // Вспомогательная функция проверки наличия хэша поста в URL
+  function hasPostHash() {
+    const hash = window.location.hash;
+    return /^#post-[a-f0-9-]+/i.test(hash);
+  }
+
+  // Автоматический скролл к конкретному посту по хэшу #post-[postId] в URL
+  function checkAndScrollToPost() {
+    if (!isTargetPage()) return;
+
+    const hash = window.location.hash;
+    const match = hash.match(/^#post-([a-f0-9-]+)/i);
+    if (!match) return;
+
+    const postId = match[1];
+    const currentUrl = window.location.href;
+    
+    // Предотвращаем бесконечные повторные попытки скроллинга к тому же самому посту
+    if (currentUrl === lastScrolledPostId) return;
+    lastScrolledPostId = currentUrl;
+
+    let attempts = 0;
+    const maxAttempts = 30; // ~15 секунд при 500мс интервале
+
+    const interval = setInterval(() => {
+      attempts++;
+
+      // Ищем ссылку на этот пост в ленте
+      const linkElement = document.querySelector(`a[href*="/posts/${postId}"]`);
+      if (linkElement) {
+        clearInterval(interval);
+
+        // Находим родительский элемент поста
+        const postElement = linkElement.closest('[class*="Post-scss--module_root"]');
+        const targetElement = postElement || linkElement;
+
+        const yOffset = -80; // 56px шапка Boosty + 24px воздух
+        const rect = targetElement.getBoundingClientRect();
+        const y = rect.top + window.pageYOffset + yOffset;
+
+        window.scrollTo({ top: y, behavior: 'smooth' });
+        return;
+      }
+
+      // Если пост не найден, прокручиваем страницу вниз для триггера бесконечного скролла
+      window.scrollTo(0, document.documentElement.scrollHeight);
+
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+      }
+    }, 500);
+  }
 
   // Автоматический скролл к ленте постов, если в URL есть параметры фильтрации (теги)
   function checkAndScrollToFeed() {
     if (!isTargetPage()) return;
+    if (hasPostHash()) return; // Пропускаем скролл к фиду, если нужно скроллить к посту
 
     const currentUrl = window.location.href;
     if (currentUrl === lastScrolledUrl) return;
@@ -167,6 +224,7 @@
     
     if (isTarget) {
       checkAndScrollToFeed();
+      checkAndScrollToPost();
       if (!btn || !sidebar) {
         // Создаем элементы интерфейса
         createSidebar();
@@ -1646,6 +1704,14 @@
           </div>
 
           <div class="lf-settings-row">
+            <label class="lf-settings-label" for="lf-setting-open-chapters-in-feed">
+              Искать главы в ленте тайтла
+              <div class="lf-settings-desc">При клике на главу переходить на страницу тайтла и скроллить к посту в ленте вместо открытия отдельной страницы.</div>
+            </label>
+            <input type="checkbox" id="lf-setting-open-chapters-in-feed" class="lf-settings-checkbox" ${state.settings.openChaptersInFeed ? 'checked' : ''}>
+          </div>
+
+          <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-auto-mark">
               Автоотметка при открытии
               <div class="lf-settings-desc">Автоматически помечать главу как прочитанную при переходе по ссылке.</div>
@@ -1790,7 +1856,8 @@
               zoom: 1.25,
               zoomMigrated: true,
               sidebarOpen: true,
-              openTagsInCurrentTab: true
+              openTagsInCurrentTab: true,
+              openChaptersInFeed: true
             };
             
             // Сбрасываем временные UI-параметры
@@ -1858,6 +1925,15 @@
         state.settings.openTagsInCurrentTab = e.target.checked;
         saveStateToStorage();
         showNotification(e.target.checked ? 'Теги открываются в текущей вкладке' : 'Теги открываются в новой вкладке');
+      });
+    }
+
+    const openChaptersCheckbox = document.getElementById('lf-setting-open-chapters-in-feed');
+    if (openChaptersCheckbox) {
+      openChaptersCheckbox.addEventListener('change', (e) => {
+        state.settings.openChaptersInFeed = e.target.checked;
+        saveStateToStorage();
+        showNotification(e.target.checked ? 'Включен переход к главам в ленте' : 'Включено открытие отдельных страниц глав');
       });
     }
 
@@ -2312,6 +2388,11 @@
     const container = document.getElementById('lf-chapters-list');
     if (!container) return;
     
+    // Формируем правильную ссылку на тег (используя ID тега, если он есть)
+    const tagUrl = manga.tagId 
+      ? `https://boosty.to/lightfoxmanga?postsTagsIds=${manga.tagId}` 
+      : `https://boosty.to/lightfoxmanga?media=all&tag=${encodeURIComponent(manga.name)}`;
+      
     // Копируем посты для сортировки
     const sortedPosts = [...manga.posts];
     if (!state.ui.sortAsc) {
@@ -2330,9 +2411,20 @@
       
       const dateStr = formatDate(post.publishTime);
       
+      let chapterUrl;
+      let targetAttr;
+
+      if (state.settings.openChaptersInFeed) {
+        chapterUrl = `${tagUrl}#post-${post.id}`;
+        targetAttr = state.settings.openTagsInCurrentTab ? '' : 'target="_blank"';
+      } else {
+        chapterUrl = `https://boosty.to/lightfoxmanga/posts/${post.id}`;
+        targetAttr = 'target="_blank"';
+      }
+
       row.innerHTML = `
         <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? 'title="Этот пост лайкнут на Boosty"' : ''}>
-        <a class="lf-chapter-title-link" href="https://boosty.to/lightfoxmanga/posts/${post.id}" target="_blank" title="${escapeHtml(post.title)}">
+        <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title)}">
           ${escapeHtml(post.title)}
         </a>
         <span class="lf-chapter-date">${dateStr}</span>
@@ -2384,13 +2476,30 @@
         }
       });
       
-      // Автоматическое помечание как прочитанного при переходе по ссылке
+      // Клик по ссылке на главу
       const link = row.querySelector('.lf-chapter-title-link');
-      link.addEventListener('click', () => {
+      link.addEventListener('click', (e) => {
+        // Автоматическое помечание как прочитанного при переходе по ссылке
         if (state.settings.autoMarkOpen && !checkbox.checked && !checkbox.classList.contains('lf-liked-checkbox')) {
           checkbox.checked = true;
-          // Инициируем событие change вручную
           checkbox.dispatchEvent(new Event('change'));
+        }
+
+        // SPA-переход, если включен openChaptersInFeed и openTagsInCurrentTab
+        if (state.settings.openChaptersInFeed && state.settings.openTagsInCurrentTab) {
+          // Исключаем открытие в новой вкладке (Ctrl/Cmd/средний клик)
+          if (e.ctrlKey || e.metaKey || e.button === 1) {
+            return;
+          }
+          e.preventDefault();
+          
+          const relativeUrl = chapterUrl.replace('https://boosty.to', '');
+          try {
+            history.pushState({}, '', relativeUrl);
+            window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+          } catch (err) {
+            window.location.href = chapterUrl;
+          }
         }
       });
       
