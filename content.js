@@ -83,14 +83,15 @@
     settings: {
       syncLikes: true,   // Учитывать лайки как просмотренное
       autoMarkOpen: false, // Автоматически помечать главу как прочитанную при открытии
-      tabOrder: ['favorite', 'all', 'new', 'watching', 'completed', 'dropped'],
-      zoom: 125,         // Масштаб боковой панели (100%, 110%, 120%, 125%, 130%, 140%, 150%)
+      tabOrder: ['favorite', 'all', 'watching', 'new', 'completed', 'dropped'],
+      zoom: 100,         // Масштаб боковой панели (80%, 90%, 100%, 110%, 120%, 130%, 140%, 150%)
       sidebarOpen: false  // Состояние открытости панели (сохраняется)
     },
     
     // Временное состояние интерфейса (не сохраняется в БД)
     ui: {
       activeTab: 'favorite', // 'favorite', 'watching', 'new', 'all', 'completed', 'dropped'
+      previousTab: 'favorite', // Запоминает предыдущую вкладку перед переходом в настройки
       searchQuery: '',
       activeTitle: null,     // Название тайтла, открытого в детальном виде (null = список)
       sortAsc: true,         // Сортировка глав: true - сначала старые (1-10, 11-20), false - новые
@@ -319,16 +320,33 @@
           if (saved.settings) {
             state.settings = { ...state.settings, ...saved.settings };
           }
-          const oldDefaultOrder = ['favorite', 'watching', 'new', 'all', 'completed', 'dropped'];
-          const newDefaultOrder = ['favorite', 'all', 'new', 'watching', 'completed', 'dropped'];
+          const oldDefaultOrder1 = ['favorite', 'watching', 'new', 'all', 'completed', 'dropped'];
+          const oldDefaultOrder2 = ['favorite', 'all', 'new', 'watching', 'completed', 'dropped'];
+          const newDefaultOrder = ['favorite', 'all', 'watching', 'new', 'completed', 'dropped'];
           if (!state.settings.tabOrder || !Array.isArray(state.settings.tabOrder) || state.settings.tabOrder.length === 0) {
             state.settings.tabOrder = newDefaultOrder;
-          } else if (JSON.stringify(state.settings.tabOrder) === JSON.stringify(oldDefaultOrder)) {
+          } else if (JSON.stringify(state.settings.tabOrder) === JSON.stringify(oldDefaultOrder1) || 
+                     JSON.stringify(state.settings.tabOrder) === JSON.stringify(oldDefaultOrder2)) {
             state.settings.tabOrder = newDefaultOrder;
             saveStateToStorage();
           }
-          if (!state.settings.zoom) {
-            state.settings.zoom = 125;
+          if (saved.settings && saved.settings.zoom) {
+            const oldZoom = saved.settings.zoom;
+            const migrationMap = {
+              100: 80,
+              110: 90,
+              120: 100,
+              125: 100,
+              130: 110,
+              140: 110,
+              150: 120
+            };
+            if (migrationMap[oldZoom] !== undefined) {
+              state.settings.zoom = migrationMap[oldZoom];
+              saveStateToStorage();
+            }
+          } else {
+            state.settings.zoom = 100;
           }
           resolve();
         });
@@ -1200,12 +1218,18 @@
     
     // Применяем масштаб из настроек через CSS-переменную
     if (state.settings.zoom) {
-      sidebar.style.setProperty('--lf-zoom', state.settings.zoom / 100);
+      sidebar.style.setProperty('--lf-zoom', state.settings.zoom / 80);
     }
     
-    // Предотвращаем закрытие панели при кликах внутри неё
+    // Предотвращаем закрытие панели при кликах внутри неё, но закрываем дропдаун при клике мимо него
     sidebar.addEventListener('click', (event) => {
       event.stopPropagation();
+      if (!event.target.closest('.lf-dropdown')) {
+        const dropdown = document.getElementById('lf-archive-dropdown');
+        if (dropdown) {
+          dropdown.classList.remove('lf-show');
+        }
+      }
     });
     
     document.body.appendChild(sidebar);
@@ -1361,9 +1385,18 @@
       <!-- Вкладки (только в списке) -->
       ${!state.ui.activeTitle ? `
         <div class="lf-tabs">
-          ${state.settings.tabOrder.map(tabKey => `
+          ${state.settings.tabOrder.filter(tabKey => tabKey !== 'completed' && tabKey !== 'dropped').map(tabKey => `
             <button class="lf-tab-btn ${state.ui.activeTab === tabKey ? 'lf-active' : ''}" data-tab="${tabKey}">${TAB_NAMES[tabKey] || tabKey}</button>
           `).join('')}
+          <div class="lf-dropdown">
+            <button id="lf-archive-btn" class="lf-tab-btn lf-dropdown-trigger ${['completed', 'dropped'].includes(state.ui.activeTab) ? 'lf-active' : ''}">
+              ${state.ui.activeTab === 'dropped' ? 'Брошено' : (state.ui.activeTab === 'completed' ? 'Завершено' : 'Архив')} <span class="lf-arrow">▼</span>
+            </button>
+            <div class="lf-dropdown-content" id="lf-archive-dropdown">
+              <button class="lf-dropdown-item ${state.ui.activeTab === 'completed' ? 'lf-active' : ''}" data-tab="completed">Завершено</button>
+              <button class="lf-dropdown-item ${state.ui.activeTab === 'dropped' ? 'lf-active' : ''}" data-tab="dropped">Брошено</button>
+            </div>
+          </div>
         </div>
       ` : ''}
 
@@ -1379,7 +1412,12 @@
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
         state.ui.activeTitle = null;
-        state.ui.activeTab = 'settings';
+        if (state.ui.activeTab === 'settings') {
+          state.ui.activeTab = state.ui.previousTab || 'favorite';
+        } else {
+          state.ui.previousTab = state.ui.activeTab;
+          state.ui.activeTab = 'settings';
+        }
         render();
       });
     }
@@ -1419,11 +1457,34 @@
         });
       }
       
-      // Вкладки
-      const tabButtons = sidebar.querySelectorAll('.lf-tab-btn');
+      // Вкладки (только обычные)
+      const tabButtons = sidebar.querySelectorAll('.lf-tab-btn:not(.lf-dropdown-trigger)');
       tabButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
           state.ui.activeTab = e.target.dataset.tab;
+          render();
+        });
+      });
+
+      // Дропдаун архива
+      const archiveBtn = document.getElementById('lf-archive-btn');
+      const archiveDropdown = document.getElementById('lf-archive-dropdown');
+      if (archiveBtn && archiveDropdown) {
+        archiveBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          archiveDropdown.classList.toggle('lf-show');
+        });
+      }
+
+      // Элементы дропдауна
+      const dropdownItems = sidebar.querySelectorAll('.lf-dropdown-item');
+      dropdownItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          state.ui.activeTab = e.currentTarget.dataset.tab;
+          if (archiveDropdown) {
+            archiveDropdown.classList.remove('lf-show');
+          }
           render();
         });
       });
@@ -1508,10 +1569,11 @@
               <div class="lf-settings-desc">Настройте удобный размер текста и элементов интерфейса.</div>
             </label>
             <select id="lf-setting-zoom" class="lf-settings-select">
+              <option value="80" ${state.settings.zoom === 80 ? 'selected' : ''}>80%</option>
+              <option value="90" ${state.settings.zoom === 90 ? 'selected' : ''}>90%</option>
               <option value="100" ${state.settings.zoom === 100 ? 'selected' : ''}>100%</option>
               <option value="110" ${state.settings.zoom === 110 ? 'selected' : ''}>110%</option>
               <option value="120" ${state.settings.zoom === 120 ? 'selected' : ''}>120%</option>
-              <option value="125" ${state.settings.zoom === 125 ? 'selected' : ''}>125%</option>
               <option value="130" ${state.settings.zoom === 130 ? 'selected' : ''}>130%</option>
               <option value="140" ${state.settings.zoom === 140 ? 'selected' : ''}>140%</option>
               <option value="150" ${state.settings.zoom === 150 ? 'selected' : ''}>150%</option>
@@ -1603,7 +1665,7 @@
         
         const sidebar = document.getElementById('lf-sidebar');
         if (sidebar) {
-          sidebar.style.setProperty('--lf-zoom', newZoom / 100);
+          sidebar.style.setProperty('--lf-zoom', newZoom / 80);
         }
         
         showNotification(`Масштаб изменен на ${newZoom}%`);

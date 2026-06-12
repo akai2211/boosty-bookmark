@@ -240,14 +240,9 @@
 /* Tabs Bar */
 .lf-tabs {
   display: flex;
-  overflow-x: auto;
+  overflow: visible;
   border-bottom: 1px solid var(--lf-border);
   background-color: rgba(0, 0, 0, 0.05);
-  scrollbar-width: none; /* Firefox */
-}
-
-.lf-tabs::-webkit-scrollbar {
-  display: none; /* Safari/Chrome */
 }
 
 .lf-tab-btn {
@@ -270,6 +265,73 @@
 .lf-tab-btn.lf-active {
   color: var(--lf-primary);
   border-bottom-color: var(--lf-primary);
+}
+
+/* Dropdown Menu for Completed/Dropped */
+.lf-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.lf-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lf-dropdown-trigger .lf-arrow {
+  font-size: 8px;
+  display: inline-block;
+  margin-left: 2px;
+  transition: transform 0.2s;
+}
+
+.lf-dropdown-content {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background-color: var(--lf-bg);
+  min-width: 120px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  border-radius: var(--lf-border-radius);
+  border: 1px solid var(--lf-border);
+  overflow: hidden;
+  animation: lfFadeIn 0.2s ease;
+}
+
+.lf-dropdown-content.lf-show {
+  display: block;
+}
+
+.lf-dropdown-item {
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--lf-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.lf-dropdown-item:hover {
+  background-color: var(--lf-hover-bg);
+  color: var(--lf-text);
+}
+
+.lf-dropdown-item.lf-active {
+  color: var(--lf-primary);
+  background-color: rgba(251, 192, 45, 0.05);
+}
+
+@keyframes lfFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Content Area */
