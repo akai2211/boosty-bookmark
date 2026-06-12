@@ -246,7 +246,7 @@
 }
 
 .lf-tab-btn {
-  padding: 12px 14px;
+  padding: 12px 11px;
   background: none;
   border: none;
   color: var(--lf-text-muted);
@@ -591,6 +591,7 @@
 .lf-notes-textarea {
   width: 100%;
   height: 90px;
+  min-height: 90px;
   padding: 8px 12px;
   background-color: var(--lf-input-bg);
   border: 1px solid var(--lf-border);
@@ -1044,6 +1045,36 @@
 .lf-settings-select:focus {
   border-color: var(--lf-primary);
   box-shadow: 0 0 0 2px rgba(230, 91, 16, 0.2);
+}
+
+.lf-btn-danger {
+  background-color: #d32f2f;
+  color: #fff;
+  border: none;
+  border-radius: var(--lf-border-radius);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color 0.2s;
+}
+
+.lf-btn-danger:hover {
+  background-color: #b71c1c;
+}
+
+#lf-delete-data-btn {
+  transition: all 0.2s ease;
+}
+
+#lf-delete-data-btn:hover {
+  border-color: rgba(211, 47, 47, 0.5) !important;
+  color: rgba(211, 47, 47, 1) !important;
+  background-color: rgba(211, 47, 47, 0.05) !important;
 }
 
 

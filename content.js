@@ -71,6 +71,15 @@
     const sidebar = document.getElementById('lf-sidebar');
     if (btn) btn.remove();
     if (sidebar) sidebar.remove();
+
+    lastScrolledUrl = null;
+
+    try {
+      sessionStorage.removeItem('lf_active_title');
+      sessionStorage.removeItem('lf_active_tab');
+    } catch (e) {
+      // Игнорируем ошибки доступа
+    }
   }
 
   // Глобальное состояние
@@ -84,8 +93,10 @@
       syncLikes: true,   // Учитывать лайки как просмотренное
       autoMarkOpen: false, // Автоматически помечать главу как прочитанную при открытии
       tabOrder: ['favorite', 'all', 'watching', 'new', 'completed', 'dropped'],
-      zoom: 100,         // Масштаб боковой панели (80%, 90%, 100%, 110%, 120%, 130%, 140%, 150%)
-      sidebarOpen: false  // Состояние открытости панели (сохраняется)
+      zoom: 1.25,         // Коэффициент масштаба боковой панели (соответствует 100% в UI)
+      zoomMigrated: true, // Флаг выполненной миграции масштаба
+      sidebarOpen: false, // Состояние открытости панели (сохраняется)
+      openTagsInCurrentTab: true // Открывать теги в текущей вкладке
     },
     
     // Временное состояние интерфейса (не сохраняется в БД)
@@ -115,6 +126,39 @@
     return path === `/${BLOG_SLUG}` || path.startsWith(`/${BLOG_SLUG}/`);
   }
 
+  let lastScrolledUrl = null;
+
+  // Автоматический скролл к ленте постов, если в URL есть параметры фильтрации (теги)
+  function checkAndScrollToFeed() {
+    if (!isTargetPage()) return;
+
+    const currentUrl = window.location.href;
+    if (currentUrl === lastScrolledUrl) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('postsTagsIds') || urlParams.has('tag')) {
+      let attempts = 0;
+      const maxAttempts = 30; // 3 секунды максимум
+      const interval = setInterval(() => {
+        attempts++;
+        const targetElement = document.querySelector('[class*="FeedTabs-scss--module_root_"]');
+        if (targetElement) {
+          clearInterval(interval);
+          const yOffset = -80; // 56px шапка Boosty + 24px запас (воздух)
+          const rect = targetElement.getBoundingClientRect();
+          const y = rect.top + window.pageYOffset + yOffset;
+          window.scrollTo({ top: y, behavior: 'smooth' });
+          lastScrolledUrl = currentUrl;
+        }
+        if (attempts >= maxAttempts) {
+          clearInterval(interval);
+        }
+      }, 100);
+    } else {
+      lastScrolledUrl = currentUrl;
+    }
+  }
+
   // Управление видимостью интерфейса в зависимости от URL
   async function checkUrlAndToggleVisibility() {
     const isTarget = isTargetPage();
@@ -122,6 +166,7 @@
     const sidebar = document.getElementById('lf-sidebar');
     
     if (isTarget) {
+      checkAndScrollToFeed();
       if (!btn || !sidebar) {
         // Создаем элементы интерфейса
         createSidebar();
@@ -262,6 +307,20 @@
   // Инициализация расширения
   async function init() {
     await loadStateFromStorage();
+
+    // Восстанавливаем активный тайтл и вкладку из sessionStorage (для сохранения состояния текущей вкладки при перезагрузке)
+    try {
+      const savedActiveTitle = sessionStorage.getItem('lf_active_title');
+      if (savedActiveTitle) {
+        state.ui.activeTitle = savedActiveTitle;
+      }
+      const savedActiveTab = sessionStorage.getItem('lf_active_tab');
+      if (savedActiveTab) {
+        state.ui.activeTab = savedActiveTab;
+      }
+    } catch (e) {
+      // Игнорируем ошибки доступа к sessionStorage
+    }
     
     // Обновляем время визита
     const now = Date.now();
@@ -319,6 +378,12 @@
           state.blogDescriptionLinks = saved.blogDescriptionLinks || [];
           if (saved.settings) {
             state.settings = { ...state.settings, ...saved.settings };
+            // Миграция openTagsInNewTab -> openTagsInCurrentTab
+            if (saved.settings.openTagsInNewTab !== undefined && saved.settings.openTagsInCurrentTab === undefined) {
+              state.settings.openTagsInCurrentTab = !saved.settings.openTagsInNewTab;
+              delete state.settings.openTagsInNewTab;
+              saveStateToStorage();
+            }
           }
           const oldDefaultOrder1 = ['favorite', 'watching', 'new', 'all', 'completed', 'dropped'];
           const oldDefaultOrder2 = ['favorite', 'all', 'new', 'watching', 'completed', 'dropped'];
@@ -330,23 +395,37 @@
             state.settings.tabOrder = newDefaultOrder;
             saveStateToStorage();
           }
-          if (saved.settings && saved.settings.zoom) {
-            const oldZoom = saved.settings.zoom;
-            const migrationMap = {
-              100: 80,
-              110: 90,
-              120: 100,
-              125: 100,
-              130: 110,
-              140: 110,
-              150: 120
-            };
-            if (migrationMap[oldZoom] !== undefined) {
-              state.settings.zoom = migrationMap[oldZoom];
+          // Проверяем и мигрируем масштаб один раз
+          if (saved.settings && saved.settings.zoom !== undefined) {
+            let loadedZoom = saved.settings.zoom;
+            // Если значение в старом формате целых процентов (80, 100, 125 и т.д.)
+            if (typeof loadedZoom === 'number' && loadedZoom >= 10) {
+              const migrationMap = {
+                80: 1.0,
+                90: 1.125,
+                100: 1.25,
+                110: 1.375,
+                120: 1.5,
+                130: 1.625,
+                140: 1.75,
+                150: 1.875,
+                125: 1.25 // старый дефолт
+              };
+              if (migrationMap[loadedZoom] !== undefined) {
+                state.settings.zoom = migrationMap[loadedZoom];
+              } else {
+                state.settings.zoom = 1.25;
+              }
+              state.settings.zoomMigrated = true;
               saveStateToStorage();
+            } else {
+              // Если уже коэффициент
+              state.settings.zoom = loadedZoom;
+              state.settings.zoomMigrated = true;
             }
           } else {
-            state.settings.zoom = 100;
+            state.settings.zoom = 1.25;
+            state.settings.zoomMigrated = true;
           }
           resolve();
         });
@@ -1218,7 +1297,7 @@
     
     // Применяем масштаб из настроек через CSS-переменную
     if (state.settings.zoom) {
-      sidebar.style.setProperty('--lf-zoom', state.settings.zoom / 80);
+      sidebar.style.setProperty('--lf-zoom', state.settings.zoom);
     }
     
     // Предотвращаем закрытие панели при кликах внутри неё, но закрываем дропдаун при клике мимо него
@@ -1314,6 +1393,14 @@
   function render() {
     const sidebar = document.getElementById('lf-sidebar');
     if (!sidebar) return;
+
+    // Сохраняем временное состояние UI в sessionStorage текущей вкладки (для сохранения при перезагрузках)
+    try {
+      sessionStorage.setItem('lf_active_title', state.ui.activeTitle || '');
+      sessionStorage.setItem('lf_active_tab', state.ui.activeTab || 'favorite');
+    } catch (e) {
+      // Игнорируем ошибки доступа к sessionStorage
+    }
     
     // Если идет синхронизация
     if (state.ui.isSyncing) {
@@ -1551,6 +1638,14 @@
           </div>
 
           <div class="lf-settings-row">
+            <label class="lf-settings-label" for="lf-setting-open-tags">
+              Открывать теги в текущей вкладке
+              <div class="lf-settings-desc">Если отключено, теги будут открываться в новой вкладке браузера.</div>
+            </label>
+            <input type="checkbox" id="lf-setting-open-tags" class="lf-settings-checkbox" ${state.settings.openTagsInCurrentTab ? 'checked' : ''}>
+          </div>
+
+          <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-auto-mark">
               Автоотметка при открытии
               <div class="lf-settings-desc">Автоматически помечать главу как прочитанную при переходе по ссылке.</div>
@@ -1569,14 +1664,14 @@
               <div class="lf-settings-desc">Настройте удобный размер текста и элементов интерфейса.</div>
             </label>
             <select id="lf-setting-zoom" class="lf-settings-select">
-              <option value="80" ${state.settings.zoom === 80 ? 'selected' : ''}>80%</option>
-              <option value="90" ${state.settings.zoom === 90 ? 'selected' : ''}>90%</option>
-              <option value="100" ${state.settings.zoom === 100 ? 'selected' : ''}>100%</option>
-              <option value="110" ${state.settings.zoom === 110 ? 'selected' : ''}>110%</option>
-              <option value="120" ${state.settings.zoom === 120 ? 'selected' : ''}>120%</option>
-              <option value="130" ${state.settings.zoom === 130 ? 'selected' : ''}>130%</option>
-              <option value="140" ${state.settings.zoom === 140 ? 'selected' : ''}>140%</option>
-              <option value="150" ${state.settings.zoom === 150 ? 'selected' : ''}>150%</option>
+              <option value="1.0" ${state.settings.zoom === 1.0 ? 'selected' : ''}>80%</option>
+              <option value="1.125" ${state.settings.zoom === 1.125 ? 'selected' : ''}>90%</option>
+              <option value="1.25" ${state.settings.zoom === 1.25 ? 'selected' : ''}>100%</option>
+              <option value="1.375" ${state.settings.zoom === 1.375 ? 'selected' : ''}>110%</option>
+              <option value="1.5" ${state.settings.zoom === 1.5 ? 'selected' : ''}>120%</option>
+              <option value="1.625" ${state.settings.zoom === 1.625 ? 'selected' : ''}>130%</option>
+              <option value="1.75" ${state.settings.zoom === 1.75 ? 'selected' : ''}>140%</option>
+              <option value="1.875" ${state.settings.zoom === 1.875 ? 'selected' : ''}>150%</option>
             </select>
           </div>
         </div>
@@ -1620,6 +1715,12 @@
           <div><strong>Версия:</strong> 1.0</div>
           <div style="margin-top: 8px;">Разработано для быстрого и удобного отслеживания глав на странице автора lightfoxmanga.</div>
         </div>
+
+        <div id="lf-delete-container" style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
+          <button id="lf-delete-data-btn" class="lf-btn-secondary" style="width: 100%; border-color: rgba(211, 47, 47, 0.2); color: rgba(211, 47, 47, 0.7); font-size: 11px; padding: 6px 10px; margin: 0;">
+            Удалить сохранённые данные
+          </button>
+        </div>
       </div>
     `;
 
@@ -1630,6 +1731,102 @@
     const importInput = document.getElementById('lf-import-input');
     importBtn.addEventListener('click', () => importInput.click());
     importInput.addEventListener('change', importUserData);
+
+    // Кнопка удаления данных (двухэтапное подтверждение)
+    const deleteDataBtn = document.getElementById('lf-delete-data-btn');
+    const deleteContainer = document.getElementById('lf-delete-container');
+    let deleteTimeout = null;
+
+    if (deleteDataBtn && deleteContainer) {
+      deleteDataBtn.addEventListener('click', () => {
+        const isConfirming = deleteDataBtn.getAttribute('data-confirming') === 'true';
+
+        if (!isConfirming) {
+          // Переводим в состояние подтверждения
+          deleteDataBtn.setAttribute('data-confirming', 'true');
+          deleteDataBtn.textContent = 'Вы точно уверены? Нажмите для удаления';
+          deleteDataBtn.style.backgroundColor = '#d32f2f';
+          deleteDataBtn.style.color = '#ffffff';
+          deleteDataBtn.style.borderColor = '#d32f2f';
+
+          // Создаем кнопку отмены
+          const cancelBtn = document.createElement('button');
+          cancelBtn.id = 'lf-delete-cancel-btn';
+          cancelBtn.className = 'lf-btn-secondary';
+          cancelBtn.style.width = '100%';
+          cancelBtn.style.fontSize = '11px';
+          cancelBtn.style.padding = '6px 10px';
+          cancelBtn.textContent = 'Отмена';
+          
+          cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetDeleteButton();
+          });
+
+          deleteContainer.appendChild(cancelBtn);
+
+          // Таймер автоотмены через 5 секунд
+          deleteTimeout = setTimeout(() => {
+            resetDeleteButton();
+          }, 5000);
+
+        } else {
+          // Второе нажатие — выполняем удаление
+          if (deleteTimeout) clearTimeout(deleteTimeout);
+          
+          chrome.storage.local.clear(() => {
+            showNotification('Все данные успешно удалены');
+            
+            // Сбрасываем локальное состояние
+            state.posts = [];
+            state.user_data = {};
+            state.lastVisit = 0;
+            state.collapsedGroups = {};
+            state.blogDescriptionLinks = [];
+            state.settings = {
+              syncLikes: true,
+              autoMarkOpen: false,
+              tabOrder: ['favorite', 'all', 'watching', 'new', 'completed', 'dropped'],
+              zoom: 1.25,
+              zoomMigrated: true,
+              sidebarOpen: true,
+              openTagsInCurrentTab: true
+            };
+            
+            // Сбрасываем временные UI-параметры
+            state.ui.activeTitle = null;
+            state.ui.activeTab = 'favorite';
+            try {
+              sessionStorage.removeItem('lf_active_title');
+              sessionStorage.removeItem('lf_active_tab');
+            } catch(e) {}
+            
+            // Восстанавливаем дефолтный масштаб в DOM
+            const sidebar = document.getElementById('lf-sidebar');
+            if (sidebar) {
+              sidebar.style.setProperty('--lf-zoom', 1.25);
+            }
+            
+            // Перерисовываем интерфейс (появится экран первой синхронизации)
+            render();
+          });
+        }
+      });
+
+      function resetDeleteButton() {
+        if (deleteTimeout) clearTimeout(deleteTimeout);
+        deleteDataBtn.removeAttribute('data-confirming');
+        deleteDataBtn.textContent = 'Удалить сохранённые данные';
+        deleteDataBtn.style.backgroundColor = '';
+        deleteDataBtn.style.color = '';
+        deleteDataBtn.style.borderColor = '';
+        
+        const cancelBtn = document.getElementById('lf-delete-cancel-btn');
+        if (cancelBtn) {
+          cancelBtn.remove();
+        }
+      }
+    }
 
     // Подключение полной принудительной синхронизации
     const fullSyncBtn = document.getElementById('lf-full-sync-btn');
@@ -1655,20 +1852,29 @@
       showNotification(e.target.checked ? 'Автоотметка включена' : 'Автоотметка отключена');
     });
 
+    const openTagsCheckbox = document.getElementById('lf-setting-open-tags');
+    if (openTagsCheckbox) {
+      openTagsCheckbox.addEventListener('change', (e) => {
+        state.settings.openTagsInCurrentTab = e.target.checked;
+        saveStateToStorage();
+        showNotification(e.target.checked ? 'Теги открываются в текущей вкладке' : 'Теги открываются в новой вкладке');
+      });
+    }
+
     // Подключение событий выбора масштаба
     const zoomSelect = document.getElementById('lf-setting-zoom');
     if (zoomSelect) {
       zoomSelect.addEventListener('change', (e) => {
-        const newZoom = parseInt(e.target.value);
+        const newZoom = parseFloat(e.target.value);
         state.settings.zoom = newZoom;
         saveStateToStorage();
         
         const sidebar = document.getElementById('lf-sidebar');
         if (sidebar) {
-          sidebar.style.setProperty('--lf-zoom', newZoom / 80);
+          sidebar.style.setProperty('--lf-zoom', newZoom);
         }
         
-        showNotification(`Масштаб изменен на ${newZoom}%`);
+        showNotification(`Масштаб изменен на ${Math.round(newZoom * 80)}%`);
         render();
       });
     }
@@ -1975,6 +2181,8 @@
     const tagUrl = manga.tagId 
       ? `https://boosty.to/lightfoxmanga?postsTagsIds=${manga.tagId}` 
       : `https://boosty.to/lightfoxmanga?media=all&tag=${encodeURIComponent(manga.name)}`;
+      
+    const targetAttr = state.settings.openTagsInCurrentTab ? '' : 'target="_blank"';
     
     container.innerHTML = `
       <div class="lf-detail">
@@ -1988,7 +2196,7 @@
         
         <!-- Заголовок -->
         <h2 class="lf-detail-title">
-          <a class="lf-detail-title-link" href="${tagUrl}" target="_blank" title="Открыть тег на Boosty">
+          <a class="lf-detail-title-link" href="${tagUrl}" ${targetAttr} title="Открыть тег на Boosty">
             <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(manga.name)}</span>
             <svg viewBox="0 0 24 24">
               <path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
@@ -2002,11 +2210,11 @@
         <div class="lf-status-container">
           <span class="lf-field-label">Статус отслеживания</span>
           <select class="lf-status-select" id="lf-status-select">
-            <option value="none" ${manga.status === 'none' ? 'selected' : ''}>⚪ Не отслеживаю</option>
             <option value="favorite" ${manga.status === 'favorite' ? 'selected' : ''}>⭐ Избранное</option>
             <option value="watching" ${manga.status === 'watching' ? 'selected' : ''}>🟡 Смотрю</option>
             <option value="completed" ${manga.status === 'completed' ? 'selected' : ''}>🟢 Завершено</option>
             <option value="dropped" ${manga.status === 'dropped' ? 'selected' : ''}>🔴 Брошено</option>
+            <option value="none" ${manga.status === 'none' ? 'selected' : ''}>⚪ Не отслеживаю</option>
           </select>
         </div>
         
@@ -2067,6 +2275,33 @@
       state.ui.sortAsc = !state.ui.sortAsc;
       renderDetailContent(); // Перерисовываем полностью
     });
+
+    // SPA-переход при клике на тег в текущей вкладке (без перезагрузки страницы)
+    const titleLink = container.querySelector('.lf-detail-title-link');
+    if (titleLink) {
+      titleLink.addEventListener('click', (e) => {
+        // Если открываем в новой вкладке (зажата клавиша Ctrl/Cmd, или средняя кнопка мыши, или настройка "открывать в текущей" выключена)
+        if (!state.settings.openTagsInCurrentTab || e.ctrlKey || e.metaKey || e.button === 1) {
+          // Позволяем браузеру выполнить стандартное поведение (открыть в новой вкладке)
+          return;
+        }
+        
+        // Отменяем стандартную перезагрузку страницы
+        e.preventDefault();
+        
+        // Получаем путь относительно домена
+        const relativeUrl = tagUrl.replace('https://boosty.to', '');
+        
+        // Делаем плавный SPA-переход
+        try {
+          history.pushState({}, '', relativeUrl);
+          window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+        } catch (err) {
+          // Если что-то пошло не так, переходим с перезагрузкой
+          window.location.href = tagUrl;
+        }
+      });
+    }
     
     // Рендер самих глав
     renderChaptersList(manga);
