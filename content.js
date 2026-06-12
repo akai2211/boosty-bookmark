@@ -19,7 +19,7 @@
     favorite: 'Избранное',
     new: 'Новые',
     all: 'Все',
-    completed: 'Пройдено',
+    completed: 'Завершено',
     dropped: 'Брошено'
   };
 
@@ -79,10 +79,11 @@
     user_data: {},      // Прогресс пользователя { "Название тайтла": { status, notes, readPosts: [] } }
     lastVisit: 0,       // Время предыдущего визита
     collapsedGroups: {},// Свернутые категории { "Любителям манги": true }
+    blogDescriptionLinks: [], // Ссылки из описания профиля [{url, title}]
     settings: {
       syncLikes: true,   // Учитывать лайки как просмотренное
       autoMarkOpen: false, // Автоматически помечать главу как прочитанную при открытии
-      tabOrder: ['favorite', 'watching', 'new', 'all', 'completed', 'dropped'],
+      tabOrder: ['favorite', 'all', 'new', 'watching', 'completed', 'dropped'],
       zoom: 125,         // Масштаб боковой панели (100%, 110%, 120%, 125%, 130%, 140%, 150%)
       sidebarOpen: false  // Состояние открытости панели (сохраняется)
     },
@@ -310,15 +311,21 @@
         chrome.storage.local.get([STORAGE_KEY], (res) => {
           if (chrome.runtime.lastError) { resolve(); return; }
           const saved = res[STORAGE_KEY] || {};
-          state.posts = saved.posts || [];
+           state.posts = saved.posts || [];
           state.user_data = saved.user_data || {};
           state.lastVisit = saved.lastVisit || 0;
           state.collapsedGroups = saved.collapsedGroups || {};
+          state.blogDescriptionLinks = saved.blogDescriptionLinks || [];
           if (saved.settings) {
             state.settings = { ...state.settings, ...saved.settings };
           }
+          const oldDefaultOrder = ['favorite', 'watching', 'new', 'all', 'completed', 'dropped'];
+          const newDefaultOrder = ['favorite', 'all', 'new', 'watching', 'completed', 'dropped'];
           if (!state.settings.tabOrder || !Array.isArray(state.settings.tabOrder) || state.settings.tabOrder.length === 0) {
-            state.settings.tabOrder = ['favorite', 'watching', 'new', 'all', 'completed', 'dropped'];
+            state.settings.tabOrder = newDefaultOrder;
+          } else if (JSON.stringify(state.settings.tabOrder) === JSON.stringify(oldDefaultOrder)) {
+            state.settings.tabOrder = newDefaultOrder;
+            saveStateToStorage();
           }
           if (!state.settings.zoom) {
             state.settings.zoom = 125;
@@ -341,6 +348,7 @@
           user_data: state.user_data,
           lastVisit: state.lastVisit,
           collapsedGroups: state.collapsedGroups,
+          blogDescriptionLinks: state.blogDescriptionLinks,
           settings: state.settings
         };
         const update = {};
@@ -550,7 +558,7 @@
     }
   }
 
-  // Удаление лайка (реакции) с поста на Boosty (на Boosty это работает как toggle - отправляем тот же POST)
+  // Удаление лайка (реакции) с поста на Boosty
   async function removeBoostyReaction(postId) {
     const token = getBoostyAuthToken();
     if (!token) {
@@ -562,7 +570,7 @@
       const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/${postId}/reaction?from_page=blog`;
       
       const response = await fetch(url, {
-        method: 'POST',
+        method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/x-www-form-urlencoded'
@@ -608,6 +616,61 @@
     return true;
   }
 
+  // Синхронизация описания блога для получения красивых названий тайтлов
+  async function syncBlogDescription() {
+    try {
+      const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}`;
+      const headers = {};
+      const token = getBoostyAuthToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      
+      const response = await fetch(url, { headers, credentials: 'include' });
+      if (!response.ok) return;
+      
+      const result = await response.json();
+      if (result && Array.isArray(result.description)) {
+        const links = [];
+        const desc = result.description;
+        for (let i = 0; i < desc.length; i++) {
+          const item = desc[i];
+          if (item.type === 'link' && item.url && item.content) {
+            let cleanTitle = '';
+            try {
+              const parsed = JSON.parse(item.content);
+              if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+                cleanTitle = parsed[0];
+              }
+            } catch (e) {
+              cleanTitle = item.content;
+            }
+            if (cleanTitle) {
+              let note = '';
+              // Проверяем следующий элемент, если он является текстом
+              if (i + 1 < desc.length && desc[i + 1].type === 'text' && desc[i + 1].content) {
+                try {
+                  const parsedNext = JSON.parse(desc[i + 1].content);
+                  if (parsedNext && Array.isArray(parsedNext) && parsedNext.length > 0) {
+                    note = parsedNext[0];
+                  }
+                } catch (e) {
+                  note = desc[i + 1].content;
+                }
+              }
+              links.push({
+                url: item.url.trim(),
+                title: cleanTitle.trim(),
+                note: note.trim()
+              });
+            }
+          }
+        }
+        state.blogDescriptionLinks = links;
+      }
+    } catch (e) {
+      console.warn('Не удалось загрузить описание блога:', e);
+    }
+  }
+
   // Умная инкрементальная синхронизация постов
   async function performIncrementalSync() {
     if (state.ui.isSyncing) return;
@@ -633,6 +696,7 @@
     const postMap = new Map(state.posts.map(p => [String(p.id), p]));
     
     try {
+      await syncBlogDescription();
       while (!stopSync) {
         page++;
         // Показываем условный прогресс
@@ -736,6 +800,7 @@
     const limit = 100;
     
     try {
+      await syncBlogDescription();
       while (true) {
         page++;
         // Обновляем прогресс для пользователя
@@ -802,6 +867,7 @@
   // Фоновая синхронизация (загружает только первую страницу при открытии страницы)
   async function backgroundSync() {
     try {
+      await syncBlogDescription();
       const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/?limit=40`;
       const headers = {};
       const token = getBoostyAuthToken();
@@ -863,34 +929,95 @@
   // Группировка постов по тайтлам (тегам)
   function getGroupedTitles() {
     const titlesMap = {};
+    const tagNamesMap = {};
+    const postNamesMap = {};
+    let hasMigration = false;
     
+    // Сначала извлекаем сопоставления из сохраненных ссылок описания блога
+    if (Array.isArray(state.blogDescriptionLinks)) {
+      state.blogDescriptionLinks.forEach(link => {
+        const urlStr = link.url;
+        const cleanName = link.title;
+        try {
+          const urlObj = new URL(urlStr, 'https://boosty.to');
+          const postsTagsIds = urlObj.searchParams.get('postsTagsIds');
+          if (postsTagsIds) {
+            tagNamesMap[postsTagsIds] = cleanName;
+          } else {
+            const postMatch = urlObj.pathname.match(/\/posts\/([a-f0-9-]+)/i);
+            if (postMatch && postMatch[1]) {
+              postNamesMap[postMatch[1]] = cleanName;
+            }
+          }
+        } catch (e) {
+          // Игнорируем некорректные URL
+        }
+      });
+    }
+    
+    // Если ссылка ведет на пост, связываем теги этого поста с красивым именем
+    state.posts.forEach(post => {
+      if (postNamesMap[post.id]) {
+        const cleanName = postNamesMap[post.id];
+        const cleanTags = post.tags.filter(t => !TAGS_BLACKLIST.includes(t.title.toLowerCase()));
+        cleanTags.forEach(tagObj => {
+          if (tagObj.id && !tagNamesMap[tagObj.id]) {
+            tagNamesMap[tagObj.id] = cleanName;
+          }
+        });
+      }
+    });
+
     state.posts.forEach(post => {
       // Находим все чистые теги поста (исключая технические из черного списка)
       const cleanTags = post.tags
-        .map(t => t.title)
-        .filter(title => !TAGS_BLACKLIST.includes(title.toLowerCase()));
+        .filter(t => !TAGS_BLACKLIST.includes(t.title.toLowerCase()));
       
       // Если после фильтрации тегов не осталось, относим к категории "Разное"
       if (cleanTags.length === 0) {
-        cleanTags.push('Разное');
+        cleanTags.push({ id: '', title: 'Разное' });
       }
       
       // Добавляем пост во все соответствующие группы тегов
-      cleanTags.forEach(tagTitle => {
-        const normalizedTag = tagTitle.charAt(0).toUpperCase() + tagTitle.slice(1);
-        if (!titlesMap[normalizedTag]) {
-          titlesMap[normalizedTag] = {
-            name: normalizedTag,
+      cleanTags.forEach(tagObj => {
+        const defaultName = tagObj.title.charAt(0).toUpperCase() + tagObj.title.slice(1);
+        let titleName = defaultName;
+        
+        if (tagObj.id && tagNamesMap[tagObj.id]) {
+          titleName = tagNamesMap[tagObj.id];
+        }
+        
+        // Миграция данных прогресса со старого названия на красивое новое
+        if (titleName !== defaultName && state.user_data[defaultName]) {
+          if (!state.user_data[titleName]) {
+            state.user_data[titleName] = state.user_data[defaultName];
+            delete state.user_data[defaultName];
+            hasMigration = true;
+          }
+        }
+
+        if (!titlesMap[titleName]) {
+          titlesMap[titleName] = {
+            name: titleName,
+            tagId: tagObj.id,
             posts: [],
             subscriptionLevels: new Set()
           };
         }
-        titlesMap[normalizedTag].posts.push(post);
+        // Если у существующего тайтла не был сохранен ID тега (например, из-за первого поста с пустым ID), сохраняем его
+        if (!titlesMap[titleName].tagId && tagObj.id) {
+          titlesMap[titleName].tagId = tagObj.id;
+        }
+        titlesMap[titleName].posts.push(post);
         if (post.subscriptionLevel && post.subscriptionLevel.name) {
-          titlesMap[normalizedTag].subscriptionLevels.add(post.subscriptionLevel.name);
+          titlesMap[titleName].subscriptionLevels.add(post.subscriptionLevel.name);
         }
       });
     });
+    
+    if (hasMigration) {
+      saveStateToStorage();
+    }
     
     // Формируем финальный массив тайтлов с подсчетом прогресса и метаданных
     return Object.values(titlesMap).map(title => {
@@ -934,6 +1061,55 @@
       let category = 'Все';
       const lowercaseName = title.name.toLowerCase();
       
+      let isFullyFinished = false;
+      let isVolumeFinished = false;
+
+      // 1. Попытка определить по примечанию (note) из описания блога
+      let blogNote = '';
+      if (state.blogDescriptionLinks && state.blogDescriptionLinks.length > 0) {
+        const match = state.blogDescriptionLinks.find(link => 
+          link.title.toLowerCase().trim() === title.name.toLowerCase().trim() ||
+          (title.posts.length > 0 && link.url.includes(title.posts[0].id))
+        );
+        if (match && match.note) {
+          blogNote = match.note.toLowerCase();
+        }
+      }
+
+      if (blogNote) {
+        if (blogNote.includes('полностью озвучен') || /(^|[^а-яё])(конец|заверш[её]н)([^а-яё]|$)/.test(blogNote) || blogNote.includes('🔥')) {
+          if (blogNote.includes('том')) {
+            isVolumeFinished = true;
+          } else {
+            isFullyFinished = true;
+          }
+        }
+      }
+
+      // 2. Проверка самого имени тайтла
+      if (!isFullyFinished && !isVolumeFinished) {
+        if (lowercaseName.includes('полностью озвучен') || /(^|[^а-яё])(конец|заверш[её]н)([^а-яё]|$)/.test(lowercaseName)) {
+          if (lowercaseName.includes('том')) {
+            isVolumeFinished = true;
+          } else {
+            isFullyFinished = true;
+          }
+        }
+      }
+
+      // 3. Проверка заголовка последнего поста (игнорируя одиночные смайлики 🔥)
+      if (!isFullyFinished && !isVolumeFinished && title.posts.length > 0) {
+        const lastPost = title.posts[title.posts.length - 1];
+        const pTitle = lastPost.title.toLowerCase();
+        if (pTitle.includes('полностью озвучен') || /(^|[^а-яё])(конец|заверш[её]н)([^а-яё]|$)/.test(pTitle)) {
+          if (pTitle.includes('том')) {
+            isVolumeFinished = true;
+          } else {
+            isFullyFinished = true;
+          }
+        }
+      }
+
       if (lowercaseName.includes('только для девушек') || lowercaseName.includes('охотник на охотника')) {
         category = 'Только для девушек';
       } else if (lowercaseName.includes('пик боевых искусств') || title.subscriptionLevels.has('Любители пика💥')) {
@@ -948,16 +1124,30 @@
         category = 'Для шейхов';
       }
       
+      // Автоматическое присвоение статуса "Смотрю", если просмотрено больше 1 поста
+      let currentStatus = userTitleData.status || 'none';
+      if (currentStatus === 'none' && readCount > 1) {
+        currentStatus = 'watching';
+        // Мутируем состояние, чтобы сохранить этот выбор при следующем saveStateToStorage
+        if (!state.user_data[title.name]) {
+          state.user_data[title.name] = { status: 'watching', notes: '', readPosts: [] };
+        } else {
+          state.user_data[title.name].status = 'watching';
+        }
+      }
+      
       return {
         ...title,
-        status: userTitleData.status || 'none',
+        status: currentStatus,
         notes: userTitleData.notes || '',
         readPosts: userTitleData.readPosts || [],
         readCount,
         statusColor,
         isNewTitle,
         hasNewChapters,
-        category
+        category,
+        isFullyFinished,
+        isVolumeFinished
       };
     });
   }
@@ -1159,6 +1349,11 @@
               <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
             </svg>
             <input type="text" id="lf-search" class="lf-search-input" placeholder="Поиск манги..." value="${escapeHtml(state.ui.searchQuery)}">
+            <button id="lf-search-clear" class="lf-search-clear-btn" style="${state.ui.searchQuery ? 'display: flex;' : 'display: none;'}" title="Очистить поиск">
+              <svg viewBox="0 0 24 24">
+                <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+              </svg>
+            </button>
           </div>
         ` : ''}
       </div>
@@ -1203,9 +1398,23 @@
     
     if (!state.ui.activeTitle) {
       const searchInput = document.getElementById('lf-search');
+      const searchClear = document.getElementById('lf-search-clear');
       if (searchInput) {
         searchInput.addEventListener('input', (e) => {
           state.ui.searchQuery = e.target.value;
+          if (searchClear) {
+            searchClear.style.display = e.target.value ? 'flex' : 'none';
+          }
+          renderListContent();
+        });
+      }
+      
+      if (searchClear && searchInput) {
+        searchClear.addEventListener('click', () => {
+          state.ui.searchQuery = '';
+          searchInput.value = '';
+          searchClear.style.display = 'none';
+          searchInput.focus();
           renderListContent();
         });
       }
@@ -1561,7 +1770,7 @@
       return;
     }
     
-    // Для вкладок «Смотрю», «Избранное», «Пройдено», «Брошено» выводим простым списком
+    // Для вкладок «Смотрю», «Избранное», «Завершено», «Брошено» выводим простым списком
     if (['watching', 'favorite', 'completed', 'dropped'].includes(state.ui.activeTab)) {
       const listDiv = document.createElement('div');
       listDiv.className = 'lf-group-container';
@@ -1582,6 +1791,8 @@
     
     // Для вкладки «Все» группируем по уровням подписки (категориям)
     const categories = [
+      'Полностью озвучено',
+      'Завершен том',
       'Любителям ютуба',
       'Любителям манги',
       'Только для девушек',
@@ -1592,7 +1803,15 @@
     ];
     
     categories.forEach(catName => {
-      const catTitles = filtered.filter(t => t.category === catName);
+      let catTitles = [];
+      if (catName === 'Полностью озвучено') {
+        catTitles = filtered.filter(t => t.isFullyFinished);
+      } else if (catName === 'Завершен том') {
+        catTitles = filtered.filter(t => t.isVolumeFinished);
+      } else {
+        catTitles = filtered.filter(t => t.category === catName);
+      }
+      
       if (catTitles.length > 0) {
         renderGroup(container, catName, catTitles);
       }
@@ -1602,7 +1821,9 @@
   // Отрисовка одной группы тайтлов (выпадающий список)
   function renderGroup(parent, groupName, titles) {
     const groupContainer = document.createElement('div');
-    const isCollapsed = state.collapsedGroups[groupName] !== false;
+    const query = state.ui.searchQuery.toLowerCase().trim();
+    // При наличии поискового запроса принудительно раскрываем категорию
+    const isCollapsed = query ? false : (state.collapsedGroups[groupName] !== false);
     groupContainer.className = `lf-group-container ${isCollapsed ? 'lf-collapsed' : ''}`;
     
     const header = document.createElement('div');
@@ -1688,7 +1909,10 @@
       return;
     }
     
-    const tagQuery = encodeURIComponent(manga.name);
+    // Формируем правильную ссылку на тег (используя ID тега, если он есть)
+    const tagUrl = manga.tagId 
+      ? `https://boosty.to/lightfoxmanga?postsTagsIds=${manga.tagId}` 
+      : `https://boosty.to/lightfoxmanga?media=all&tag=${encodeURIComponent(manga.name)}`;
     
     container.innerHTML = `
       <div class="lf-detail">
@@ -1702,13 +1926,15 @@
         
         <!-- Заголовок -->
         <h2 class="lf-detail-title">
-          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(manga.name)}">${escapeHtml(manga.name)}</span>
-          <a class="lf-detail-link" href="https://boosty.to/lightfoxmanga?media=all&tag=${tagQuery}" target="_blank" title="Открыть тег на Boosty">
+          <a class="lf-detail-title-link" href="${tagUrl}" target="_blank" title="Открыть тег на Boosty">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(manga.name)}</span>
             <svg viewBox="0 0 24 24">
               <path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
             </svg>
           </a>
         </h2>
+        
+        <div class="lf-detail-category">${manga.category ? escapeHtml(manga.category) : 'Категория не определена'}</div>
         
         <!-- Статус -->
         <div class="lf-status-container">
@@ -1762,7 +1988,7 @@
       
       // Показываем уведомление о переносе тайтла
       if (newStatus !== 'none') {
-        const statusesRu = { watching: 'Смотрю', favorite: 'Избранное', completed: 'Завершенное', dropped: 'Брошенное' };
+        const statusesRu = { watching: 'Смотрю', favorite: 'Избранное', completed: 'Завершено', dropped: 'Брошено' };
         showNotification(`Тайтл перенесен в раздел «${statusesRu[newStatus]}»`);
       }
     });
