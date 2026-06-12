@@ -58,6 +58,7 @@
     if (eventHandlers.hashchange) window.removeEventListener('hashchange', eventHandlers.hashchange);
     if (eventHandlers.lfLocationchange) window.removeEventListener('lf_locationchange', eventHandlers.lfLocationchange);
     if (eventHandlers.beforeunload) window.removeEventListener('beforeunload', eventHandlers.beforeunload);
+    if (eventHandlers.tagClickHandler) document.removeEventListener('click', eventHandlers.tagClickHandler);
     
     // Восстанавливаем оригинальные методы history
     if (eventHandlers.originalPushState) history.pushState = eventHandlers.originalPushState;
@@ -426,6 +427,36 @@
       }
     };
     window.addEventListener('beforeunload', eventHandlers.beforeunload);
+
+    // Перехват кликов по тегам на самом сайте Boosty для открытия в текущей вкладке (SPA-переход)
+    eventHandlers.tagClickHandler = (e) => {
+      if (!state.settings.openTagsInCurrentTab) return;
+      
+      const link = e.target.closest('a');
+      if (!link) return;
+      
+      const href = link.href;
+      if (href && href.includes('boosty.to/lightfoxmanga') && (href.includes('postsTagsIds=') || href.includes('tag='))) {
+        // Исключаем открытие в новой вкладке пользователем (Ctrl/Cmd/средний клик)
+        if (e.ctrlKey || e.metaKey || e.button === 1) {
+          return;
+        }
+        
+        e.preventDefault();
+        
+        link.removeAttribute('target');
+        
+        const url = new URL(href);
+        const relativeUrl = url.pathname + url.search + url.hash;
+        try {
+          history.pushState({}, '', relativeUrl);
+          window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+        } catch (err) {
+          window.location.href = href;
+        }
+      }
+    };
+    document.addEventListener('click', eventHandlers.tagClickHandler);
   }
 
   // Загрузка состояния из chrome.storage.local
