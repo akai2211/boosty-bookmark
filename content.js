@@ -375,6 +375,9 @@
       const savedActiveTitle = sessionStorage.getItem('lf_active_title');
       if (savedActiveTitle) {
         state.ui.activeTitle = savedActiveTitle;
+        if (savedActiveTitle === 'Объявления') {
+          state.ui.sortAsc = false;
+        }
       }
       const savedActiveTab = sessionStorage.getItem('lf_active_tab');
       if (savedActiveTab) {
@@ -1132,9 +1135,9 @@
       const cleanTags = post.tags
         .filter(t => !TAGS_BLACKLIST.includes(t.title.toLowerCase()));
       
-      // Если после фильтрации тегов не осталось, относим к категории "Разное"
+      // Если после фильтрации тегов не осталось, относим к категории "Объявления"
       if (cleanTags.length === 0) {
-        cleanTags.push({ id: '', title: 'Разное' });
+        cleanTags.push({ id: '', title: 'Объявления' });
       }
       
       // Добавляем пост во все соответствующие группы тегов
@@ -1269,7 +1272,9 @@
         }
       }
 
-      if (lowercaseName.includes('только для девушек') || lowercaseName.includes('охотник на охотника')) {
+      if (lowercaseName === 'объявления') {
+        category = 'Объявления';
+      } else if (lowercaseName.includes('только для девушек') || lowercaseName.includes('охотник на охотника')) {
         category = 'Только для девушек';
       } else if (lowercaseName.includes('пик боевых искусств') || title.subscriptionLevels.has('Любители пика💥')) {
         category = 'Любителям пика';
@@ -2254,7 +2259,8 @@
       'Любителям пика',
       'Для шейхов',
       'Лисямбы мои',
-      'Бесплатные'
+      'Бесплатные',
+      'Объявления'
     ];
     
     categories.forEach(catName => {
@@ -2285,6 +2291,12 @@
     
     const header = document.createElement('div');
     header.className = 'lf-group-header';
+    
+    let countHtml = `<span class="lf-group-count">${titles.length}</span>`;
+    if (groupName === 'Объявления' && titles.length > 0) {
+      countHtml = `<span class="lf-group-count">${titles[0].readCount}/${titles[0].posts.length}</span>`;
+    }
+    
     header.innerHTML = `
       <div class="lf-group-header-left">
         <svg class="lf-group-arrow" viewBox="0 0 24 24">
@@ -2292,7 +2304,7 @@
         </svg>
         <span>${groupName}</span>
       </div>
-      <span class="lf-group-count">${titles.length}</span>
+      ${countHtml}
     `;
     
     header.addEventListener('click', () => {
@@ -2310,9 +2322,130 @@
     const list = document.createElement('div');
     list.className = 'lf-group-list';
     
-    titles.forEach(manga => {
-      list.appendChild(createMangaRow(manga));
-    });
+    if (groupName === 'Объявления' && titles.length > 0) {
+      const manga = titles[0];
+      const sortedPosts = [...manga.posts];
+      const readSet = new Set((manga.readPosts || []).map(String));
+      
+      const sortType = state.settings.titleSort || 'name_asc';
+      sortedPosts.sort((a, b) => {
+        const isReadA = readSet.has(String(a.id)) || (state.settings.syncLikes && a.isLiked);
+        const isReadB = readSet.has(String(b.id)) || (state.settings.syncLikes && b.isLiked);
+        
+        switch (sortType) {
+          case 'name_asc':
+            return a.title.localeCompare(b.title);
+          case 'name_desc':
+            return b.title.localeCompare(a.title);
+          case 'new_desc':
+            return b.publishTime - a.publishTime;
+          case 'new_asc':
+            return a.publishTime - b.publishTime;
+          case 'progress_desc':
+            if (isReadA !== isReadB) {
+              return (isReadB ? 1 : 0) - (isReadA ? 1 : 0);
+            }
+            return b.publishTime - a.publishTime;
+          case 'progress_asc':
+            if (isReadA !== isReadB) {
+              return (isReadA ? 1 : 0) - (isReadB ? 1 : 0);
+            }
+            return b.publishTime - a.publishTime;
+          default:
+            return b.publishTime - a.publishTime;
+        }
+      });
+      const tagUrl = manga.tagId 
+        ? `https://boosty.to/lightfoxmanga?postsTagsIds=${manga.tagId}` 
+        : `https://boosty.to/lightfoxmanga?media=all&tag=${encodeURIComponent(manga.name)}`;
+        
+      sortedPosts.forEach(post => {
+        const row = document.createElement('div');
+        row.className = 'lf-chapter-row';
+        
+        const isLiked = state.settings.syncLikes && post.isLiked;
+        const isChecked = readSet.has(String(post.id)) || isLiked;
+        const dateStr = formatDate(post.publishTime);
+        
+        const chapterUrl = `https://boosty.to/lightfoxmanga/posts/${post.id}`;
+        const targetAttr = state.settings.openTagsInCurrentTab ? '' : 'target="_blank"';
+        
+        row.innerHTML = `
+          <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? 'title="Этот пост лайкнут на Boosty"' : ''}>
+          <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title)}">
+            ${escapeHtml(post.title)}
+          </a>
+          <span class="lf-chapter-date">${dateStr}</span>
+        `;
+        
+        const checkbox = row.querySelector('.lf-chapter-checkbox');
+        checkbox.addEventListener('change', (e) => {
+          if (e.target.classList.contains('lf-liked-checkbox') && !e.target.checked) {
+            e.target.classList.remove('lf-liked-checkbox');
+          } else if (e.target.checked) {
+            e.target.classList.add('lf-liked-checkbox');
+          }
+          
+          const userData = ensureUserData(manga.name);
+          const postId = String(e.target.dataset.postId);
+          const readPosts = userData.readPosts || [];
+          
+          if (e.target.checked) {
+            if (!readPosts.includes(postId)) readPosts.push(postId);
+          } else {
+            const index = readPosts.indexOf(postId);
+            if (index > -1) readPosts.splice(index, 1);
+          }
+          
+          userData.readPosts = readPosts;
+          saveStateToStorage();
+          
+          if (e.target.checked) {
+            sendBoostyReaction(postId);
+            window.postMessage({ type: 'LF_TOGGLE_LIKE_DOM', postId, isLiked: true }, '*');
+          } else {
+            removeBoostyReaction(postId);
+            window.postMessage({ type: 'LF_TOGGLE_LIKE_DOM', postId, isLiked: false }, '*');
+          }
+          
+          const updatedManga = getGroupedTitles().find(t => t.name === manga.name);
+          if (updatedManga) {
+            const groupCountSpan = header.querySelector('.lf-group-count');
+            if (groupCountSpan) {
+              groupCountSpan.textContent = `${updatedManga.readCount}/${updatedManga.posts.length}`;
+            }
+          }
+        });
+        
+        const link = row.querySelector('.lf-chapter-title-link');
+        link.addEventListener('click', (e) => {
+          if (state.settings.autoMarkOpen && !checkbox.checked && !checkbox.classList.contains('lf-liked-checkbox')) {
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event('change'));
+          }
+          
+          if (state.settings.openTagsInCurrentTab) {
+            if (e.ctrlKey || e.metaKey || e.button === 1) {
+              return;
+            }
+            e.preventDefault();
+            const relativeUrl = chapterUrl.replace('https://boosty.to', '');
+            try {
+              history.pushState({}, '', relativeUrl);
+              window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+            } catch (err) {
+              window.location.href = chapterUrl;
+            }
+          }
+        });
+        
+        list.appendChild(row);
+      });
+    } else {
+      titles.forEach(manga => {
+        list.appendChild(createMangaRow(manga));
+      });
+    }
     
     groupContainer.appendChild(header);
     groupContainer.appendChild(list);
@@ -2336,6 +2469,9 @@
     
     row.addEventListener('click', () => {
       state.ui.activeTitle = manga.name;
+      if (manga.name === 'Объявления') {
+        state.ui.sortAsc = false;
+      }
       render();
     });
     
@@ -2372,6 +2508,7 @@
       : `https://boosty.to/lightfoxmanga?media=all&tag=${encodeURIComponent(manga.name)}`;
       
     const targetAttr = state.settings.openTagsInCurrentTab ? '' : 'target="_blank"';
+    const isAnnouncements = manga.name === 'Объявления';
     
     container.innerHTML = `
       <div class="lf-detail">
@@ -2385,27 +2522,32 @@
         
         <!-- Заголовок -->
         <h2 class="lf-detail-title">
-          <a class="lf-detail-title-link" href="${tagUrl}" ${targetAttr} title="Открыть тег на Boosty">
-            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(manga.name)}</span>
-            <svg viewBox="0 0 24 24">
-              <path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
-            </svg>
-          </a>
+          ${isAnnouncements 
+            ? `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(manga.name)}</span>`
+            : `<a class="lf-detail-title-link" href="${tagUrl}" ${targetAttr} title="Открыть тег на Boosty">
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(manga.name)}</span>
+                <svg viewBox="0 0 24 24">
+                  <path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
+                </svg>
+              </a>`
+          }
         </h2>
         
         <div class="lf-detail-category">${manga.category ? escapeHtml(manga.category) : 'Категория не определена'}</div>
         
         <!-- Статус -->
-        <div class="lf-status-container">
-          <span class="lf-field-label">Статус отслеживания</span>
-          <select class="lf-status-select" id="lf-status-select">
-            <option value="favorite" ${manga.status === 'favorite' ? 'selected' : ''}>⭐ Избранное</option>
-            <option value="watching" ${manga.status === 'watching' ? 'selected' : ''}>🟡 Смотрю</option>
-            <option value="completed" ${manga.status === 'completed' ? 'selected' : ''}>🟢 Завершено</option>
-            <option value="dropped" ${manga.status === 'dropped' ? 'selected' : ''}>🔴 Брошено</option>
-            <option value="none" ${manga.status === 'none' ? 'selected' : ''}>⚪ Не отслеживаю</option>
-          </select>
-        </div>
+        ${isAnnouncements ? '' : `
+          <div class="lf-status-container">
+            <span class="lf-field-label">Статус отслеживания</span>
+            <select class="lf-status-select" id="lf-status-select">
+              <option value="favorite" ${manga.status === 'favorite' ? 'selected' : ''}>⭐ Избранное</option>
+              <option value="watching" ${manga.status === 'watching' ? 'selected' : ''}>🟡 Смотрю</option>
+              <option value="completed" ${manga.status === 'completed' ? 'selected' : ''}>🟢 Завершено</option>
+              <option value="dropped" ${manga.status === 'dropped' ? 'selected' : ''}>🔴 Брошено</option>
+              <option value="none" ${manga.status === 'none' ? 'selected' : ''}>⚪ Не отслеживаю</option>
+            </select>
+          </div>
+        `}
         
         <!-- Блокнот -->
         <div class="lf-notes-container">
@@ -2440,17 +2582,19 @@
     
     // Изменение статуса
     const statusSelect = document.getElementById('lf-status-select');
-    statusSelect.addEventListener('change', (e) => {
-      const newStatus = e.target.value;
-      ensureUserData(manga.name).status = newStatus;
-      saveStateToStorage();
-      
-      // Показываем уведомление о переносе тайтла
-      if (newStatus !== 'none') {
-        const statusesRu = { watching: 'Смотрю', favorite: 'Избранное', completed: 'Завершено', dropped: 'Брошено' };
-        showNotification(`Тайтл перенесен в раздел «${statusesRu[newStatus]}»`);
-      }
-    });
+    if (statusSelect) {
+      statusSelect.addEventListener('change', (e) => {
+        const newStatus = e.target.value;
+        ensureUserData(manga.name).status = newStatus;
+        saveStateToStorage();
+        
+        // Показываем уведомление о переносе тайтла
+        if (newStatus !== 'none') {
+          const statusesRu = { watching: 'Смотрю', favorite: 'Избранное', completed: 'Завершено', dropped: 'Брошено' };
+          showNotification(`Тайтл перенесен в раздел «${statusesRu[newStatus]}»`);
+        }
+      });
+    }
     
     // Блокнот
     const notesTextarea = document.getElementById('lf-notes-textarea');
@@ -2460,10 +2604,13 @@
     });
     
     // Сортировка глав
-    document.getElementById('lf-sort-btn').addEventListener('click', () => {
-      state.ui.sortAsc = !state.ui.sortAsc;
-      renderDetailContent(); // Перерисовываем полностью
-    });
+    const sortChaptersBtn = document.getElementById('lf-sort-btn');
+    if (sortChaptersBtn) {
+      sortChaptersBtn.addEventListener('click', () => {
+        state.ui.sortAsc = !state.ui.sortAsc;
+        renderDetailContent(); // Перерисовываем полностью
+      });
+    }
 
     // SPA-переход при клике на тег в текущей вкладке (без перезагрузки страницы)
     const titleLink = container.querySelector('.lf-detail-title-link');
@@ -2514,6 +2661,7 @@
     
     container.innerHTML = '';
     const readSet = new Set((manga.readPosts || []).map(String));
+    const isAnnouncements = manga.name === 'Объявления';
     
     sortedPosts.forEach(post => {
       const row = document.createElement('div');
@@ -2527,12 +2675,12 @@
       let chapterUrl;
       let targetAttr;
 
-      if (state.settings.openChaptersInFeed) {
+      if (state.settings.openChaptersInFeed && !isAnnouncements) {
         chapterUrl = `${tagUrl}#post-${post.id}`;
         targetAttr = state.settings.openTagsInCurrentTab ? '' : 'target="_blank"';
       } else {
         chapterUrl = `https://boosty.to/lightfoxmanga/posts/${post.id}`;
-        targetAttr = 'target="_blank"';
+        targetAttr = state.settings.openTagsInCurrentTab ? '' : 'target="_blank"';
       }
 
       row.innerHTML = `
@@ -2598,8 +2746,9 @@
           checkbox.dispatchEvent(new Event('change'));
         }
 
-        // SPA-переход, если включен openChaptersInFeed и openTagsInCurrentTab
-        if (state.settings.openChaptersInFeed && state.settings.openTagsInCurrentTab) {
+        // SPA-переход, если включен openTagsInCurrentTab (для обычных глав — при openChaptersInFeed, для Объявлений — всегда)
+        const shouldSpa = state.settings.openTagsInCurrentTab && (state.settings.openChaptersInFeed || isAnnouncements);
+        if (shouldSpa) {
           // Исключаем открытие в новой вкладке (Ctrl/Cmd/средний клик)
           if (e.ctrlKey || e.metaKey || e.button === 1) {
             return;
