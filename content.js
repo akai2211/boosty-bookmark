@@ -1465,6 +1465,11 @@
     const sidebar = document.getElementById('lf-sidebar');
     if (!sidebar) return;
 
+    const bodyContent = document.getElementById('lf-body-content');
+    const savedScrollTop = bodyContent ? bodyContent.scrollTop : 0;
+    const savedTab = state.ui.activeTab;
+    const savedTitle = state.ui.activeTitle;
+
     // Сохраняем временное состояние UI в sessionStorage текущей вкладки (для сохранения при перезагрузках)
     try {
       sessionStorage.setItem('lf_active_title', state.ui.activeTitle || '');
@@ -1706,6 +1711,14 @@
       renderListContent();
     } else {
       renderDetailContent();
+    }
+
+    // Восстанавливаем позицию прокрутки, если вкладка и тайтл не изменились
+    if (state.ui.activeTab === savedTab && state.ui.activeTitle === savedTitle) {
+      const newBodyContent = document.getElementById('lf-body-content');
+      if (newBodyContent && savedScrollTop > 0) {
+        newBodyContent.scrollTop = savedScrollTop;
+      }
     }
   }
 
