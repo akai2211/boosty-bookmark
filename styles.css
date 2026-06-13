@@ -698,7 +698,6 @@
 }
 
 .lf-chapter-title-link {
-  flex: 1;
   font-size: 13px;
   color: var(--lf-text);
   text-decoration: none !important;
@@ -722,6 +721,30 @@
 
 .lf-chapter-title-link::after, .lf-chapter-title-link::before {
   display: none !important;
+}
+
+.lf-chapter-title-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.lf-chapter-player-progress {
+  font-size: 10px;
+  color: var(--lf-text-muted);
+  font-weight: normal;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lf-chapter-player-progress svg {
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+  flex-shrink: 0;
 }
 
 .lf-chapter-date {

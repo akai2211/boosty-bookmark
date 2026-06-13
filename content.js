@@ -98,9 +98,11 @@
     lastVisit: 0,       // Время предыдущего визита
     collapsedGroups: {},// Свернутые категории { "Любителям манги": true }
     blogDescriptionLinks: [], // Ссылки из описания профиля [{url, title}]
+    playerTimestamps: {}, // Сохраненные таймстампы плееров { [id]: timeInSeconds }
     settings: {
       syncLikes: true,   // Учитывать лайки как просмотренное
       autoMarkOpen: false, // Автоматически помечать главу как прочитанную при открытии
+      savePlayerTime: true, // Сохранять и восстанавливать время видео/аудио
       tabOrder: ['favorite', 'all', 'watching', 'new', 'completed', 'dropped'],
       zoom: 1.25,         // Коэффициент масштаба боковой панели (соответствует 100% в UI)
       zoomMigrated: true, // Флаг выполненной миграции масштаба
@@ -246,6 +248,7 @@
     if (isTarget) {
       checkAndScrollToFeed();
       checkAndScrollToPost();
+      initPlayerTracking();
       if (!btn || !sidebar) {
         // Создаем элементы интерфейса
         createSidebar();
@@ -508,6 +511,7 @@
           state.lastVisit = saved.lastVisit || 0;
           state.collapsedGroups = saved.collapsedGroups || {};
           state.blogDescriptionLinks = saved.blogDescriptionLinks || [];
+          state.playerTimestamps = saved.playerTimestamps || {};
           if (saved.settings) {
             state.settings = { ...state.settings, ...saved.settings };
             // Миграция openTagsInCurrentTab -> openTitlesInCurrentTab
@@ -584,6 +588,7 @@
           lastVisit: state.lastVisit,
           collapsedGroups: state.collapsedGroups,
           blogDescriptionLinks: state.blogDescriptionLinks,
+          playerTimestamps: state.playerTimestamps,
           settings: state.settings
         };
         const update = {};
@@ -624,6 +629,7 @@
                 lastVisit: state.lastVisit,
                 collapsedGroups: state.collapsedGroups,
                 blogDescriptionLinks: state.blogDescriptionLinks,
+                playerTimestamps: state.playerTimestamps,
                 settings: state.settings
               };
             } else {
@@ -652,6 +658,7 @@
             lastVisit: state.lastVisit,
             collapsedGroups: state.collapsedGroups,
             blogDescriptionLinks: state.blogDescriptionLinks,
+            playerTimestamps: state.playerTimestamps,
             settings: state.settings
           };
           const jsonString = JSON.stringify(currentChannelData, null, 2);
@@ -720,6 +727,7 @@
                 lastVisit: importedData.lastVisit || 0,
                 collapsedGroups: importedData.collapsedGroups || {},
                 blogDescriptionLinks: importedData.blogDescriptionLinks || [],
+                playerTimestamps: importedData.playerTimestamps || {},
                 settings: importedData.settings || {}
               };
               storageUpdates[`lf_state_${slug}`] = channelState;
@@ -751,6 +759,7 @@
           state.lastVisit = storageUpdates[currentChannelKey].lastVisit;
           state.collapsedGroups = storageUpdates[currentChannelKey].collapsedGroups;
           state.blogDescriptionLinks = storageUpdates[currentChannelKey].blogDescriptionLinks;
+          state.playerTimestamps = storageUpdates[currentChannelKey].playerTimestamps;
           state.settings = { ...state.settings, ...storageUpdates[currentChannelKey].settings };
         }
 
@@ -2002,6 +2011,14 @@
           </div>
 
           <div class="lf-settings-row">
+            <label class="lf-settings-label" for="lf-setting-save-player">
+              Запоминать время видео и аудио
+              <div class="lf-settings-desc">Автоматически восстанавливать прогресс воспроизведения медиаплееров Boosty.</div>
+            </label>
+            <input type="checkbox" id="lf-setting-save-player" class="lf-settings-checkbox" ${state.settings.savePlayerTime ? 'checked' : ''}>
+          </div>
+
+          <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-auto-mark">
               Автоотметка при открытии
               <div class="lf-settings-desc">Автоматически помечать главу как просмотренную при переходе по ссылке.</div>
@@ -2211,6 +2228,14 @@
       saveStateToStorage();
       showNotification(e.target.checked ? 'Автоотметка включена' : 'Автоотметка отключена');
     });
+
+    const savePlayerCheckbox = document.getElementById('lf-setting-save-player');
+    if (savePlayerCheckbox) {
+      savePlayerCheckbox.addEventListener('change', (e) => {
+        state.settings.savePlayerTime = e.target.checked;
+        saveStateToStorage();
+      });
+    }
 
     const openTitlesCheckbox = document.getElementById('lf-setting-open-titles');
     if (openTitlesCheckbox) {
@@ -2747,11 +2772,33 @@
         const chapterUrl = `https://boosty.to/lightfoxmanga/posts/${post.id}`;
         const targetAttr = state.settings.openTitlesInCurrentTab ? '' : 'target="_blank"';
         
+        const progress = getPlayerProgressForPost(String(post.id));
+        const hasProgress = progress && typeof progress.time === 'number';
+        let progressHtml = '';
+        if (hasProgress && !isChecked) {
+          const timeStr = formatSeconds(progress.time);
+          if (typeof progress.duration === 'number' && progress.duration > 0) {
+            const durationStr = formatSeconds(progress.duration);
+            progressHtml = `<span class="lf-chapter-player-progress" title="Прогресс воспроизведения">
+              <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
+              Просмотрено ${timeStr} из ${durationStr}
+            </span>`;
+          } else {
+            progressHtml = `<span class="lf-chapter-player-progress" title="Прогресс воспроизведения">
+              <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
+              Остановился на ${timeStr}
+            </span>`;
+          }
+        }
+
         row.innerHTML = `
           <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? 'title="Этот пост лайкнут на Boosty"' : ''}>
-          <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title)}">
-            ${escapeHtml(post.title)}
-          </a>
+          <div class="lf-chapter-title-container">
+            <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title)}">
+              ${escapeHtml(post.title)}
+            </a>
+            ${progressHtml}
+          </div>
           <span class="lf-chapter-date">${dateStr}</span>
         `;
         
@@ -2762,9 +2809,39 @@
           } else if (e.target.checked) {
             e.target.classList.add('lf-liked-checkbox');
           }
+
+          const postId = String(e.target.dataset.postId);
+          const hasProg = getPlayerProgressForPost(postId) !== null;
+          if (e.target.checked) {
+            const progressEl = row.querySelector('.lf-chapter-player-progress');
+            if (progressEl) progressEl.style.display = 'none';
+          } else {
+            if (hasProg) {
+              let progressEl = row.querySelector('.lf-chapter-player-progress');
+              if (!progressEl) {
+                const prog = getPlayerProgressForPost(postId);
+                if (prog && typeof prog.time === 'number') {
+                  const container = row.querySelector('.lf-chapter-title-container');
+                  if (container) {
+                    progressEl = document.createElement('span');
+                    progressEl.className = 'lf-chapter-player-progress';
+                    progressEl.title = 'Прогресс воспроизведения';
+                    const timeStr = formatSeconds(prog.time);
+                    const durationStr = (typeof prog.duration === 'number' && prog.duration > 0) ? formatSeconds(prog.duration) : null;
+                    const text = durationStr ? `Просмотрено ${timeStr} из ${durationStr}` : `Остановился на ${timeStr}`;
+                    progressEl.innerHTML = `
+                      <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
+                      ${text}
+                    `;
+                    container.appendChild(progressEl);
+                  }
+                }
+              }
+              if (progressEl) progressEl.style.display = '';
+            }
+          }
           
           const userData = ensureUserData(manga.name);
-          const postId = String(e.target.dataset.postId);
           const readPosts = userData.readPosts || [];
           
           if (e.target.checked) {
@@ -3060,11 +3137,33 @@
         targetAttr = state.settings.openTitlesInCurrentTab ? '' : 'target="_blank"';
       }
 
+      const progress = getPlayerProgressForPost(String(post.id));
+      const hasProgress = progress && typeof progress.time === 'number';
+      let progressHtml = '';
+      if (hasProgress && !isChecked) {
+        const timeStr = formatSeconds(progress.time);
+        if (typeof progress.duration === 'number' && progress.duration > 0) {
+          const durationStr = formatSeconds(progress.duration);
+          progressHtml = `<span class="lf-chapter-player-progress" title="Прогресс воспроизведения">
+            <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
+            Просмотрено ${timeStr} из ${durationStr}
+          </span>`;
+        } else {
+          progressHtml = `<span class="lf-chapter-player-progress" title="Прогресс воспроизведения">
+            <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
+            Остановился на ${timeStr}
+          </span>`;
+        }
+      }
+
       row.innerHTML = `
         <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? 'title="Этот пост лайкнут на Boosty"' : ''}>
-        <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title)}">
-          ${escapeHtml(post.title)}
-        </a>
+        <div class="lf-chapter-title-container">
+          <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title)}">
+            ${escapeHtml(post.title)}
+          </a>
+          ${progressHtml}
+        </div>
         <span class="lf-chapter-date">${dateStr}</span>
       `;
       
@@ -3077,10 +3176,39 @@
         } else if (e.target.checked) {
           e.target.classList.add('lf-liked-checkbox');
         }
+
+        const postId = String(e.target.dataset.postId);
+        const hasProg = getPlayerProgressForPost(postId) !== null;
+        if (e.target.checked) {
+          const progressEl = row.querySelector('.lf-chapter-player-progress');
+          if (progressEl) progressEl.style.display = 'none';
+        } else {
+          if (hasProg) {
+            let progressEl = row.querySelector('.lf-chapter-player-progress');
+            if (!progressEl) {
+              const prog = getPlayerProgressForPost(postId);
+              if (prog && typeof prog.time === 'number') {
+                const container = row.querySelector('.lf-chapter-title-container');
+                if (container) {
+                  progressEl = document.createElement('span');
+                  progressEl.className = 'lf-chapter-player-progress';
+                  progressEl.title = 'Прогресс воспроизведения';
+                  const timeStr = formatSeconds(prog.time);
+                  const durationStr = (typeof prog.duration === 'number' && prog.duration > 0) ? formatSeconds(prog.duration) : null;
+                  const text = durationStr ? `Просмотрено ${timeStr} из ${durationStr}` : `Остановился на ${timeStr}`;
+                  progressEl.innerHTML = `
+                    <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
+                    ${text}
+                  `;
+                  container.appendChild(progressEl);
+                }
+              }
+            }
+            if (progressEl) progressEl.style.display = '';
+          }
+        }
         
         const userData = ensureUserData(manga.name);
-        
-        const postId = String(e.target.dataset.postId);
         const readPosts = userData.readPosts || [];
         
         if (e.target.checked) {
@@ -3143,6 +3271,248 @@
       });
       
       container.appendChild(row);
+    });
+  }
+
+  // -------------------------------------------------------------
+  // ЛОГИКА АВТОЗАПОМИНАНИЯ ВРЕМЕНИ ВОСПРОИЗВЕДЕНИЯ ПЛЕЕРА
+  // -------------------------------------------------------------
+  
+  // Рекурсивный поиск родительского элемента с поддержкой прохода сквозь границы Shadow DOM
+  function getClosestElement(element, selector) {
+    let current = element;
+    while (current) {
+      if (current instanceof Element && current.matches(selector)) {
+        return current;
+      }
+      let parent = current.parentElement;
+      if (!parent) {
+        const root = current.getRootNode();
+        if (root && root instanceof ShadowRoot) {
+          parent = root.host;
+        }
+      }
+      current = parent;
+    }
+    return null;
+  }
+
+  // Получение ID поста, в котором находится плеер
+  function getPostIdForPlayer(player) {
+    const postNode = getClosestElement(player, '[class*="Post-scss--module_root"]');
+    if (postNode) {
+      const link = postNode.querySelector('a[href*="/posts/"]');
+      if (link) {
+        const match = link.href.match(/posts\/([a-zA-Z0-9_-]+)/);
+        if (match) return match[1];
+      }
+    }
+    const urlMatch = window.location.pathname.match(/posts\/([a-zA-Z0-9_-]+)/);
+    if (urlMatch) return urlMatch[1];
+    return null;
+  }
+
+  // Получение прогресса плеера для конкретного поста
+  function getPlayerProgressForPost(postId) {
+    if (!state.playerTimestamps) return null;
+    for (const key in state.playerTimestamps) {
+      const entry = state.playerTimestamps[key];
+      if (entry && typeof entry === 'object' && entry.postId === postId) {
+        return entry;
+      }
+      if (key === `video_post_${postId}`) {
+        if (typeof entry === 'number') {
+          return { time: entry };
+        } else if (typeof entry === 'object') {
+          return entry;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Красивое форматирование секунд в ММ:СС или ЧЧ:ММ:СС
+  function formatSeconds(seconds) {
+    if (isNaN(seconds) || seconds === null || seconds === undefined) return '0:00';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const formattedSecs = secs < 10 ? '0' + secs : secs;
+    if (hrs > 0) {
+      const formattedMins = mins < 10 ? '0' + mins : mins;
+      return `${hrs}:${formattedMins}:${formattedSecs}`;
+    }
+    return `${mins}:${formattedSecs}`;
+  }
+
+  // Обновление прогресса главы в интерфейсе сайдбара
+  function updateChapterProgressInUI(postId, time, duration) {
+    const checkbox = document.querySelector(`.lf-chapter-checkbox[data-post-id="${postId}"]`);
+    if (!checkbox) return;
+    const row = checkbox.closest('.lf-chapter-row');
+    if (!row) return;
+    
+    const container = row.querySelector('.lf-chapter-title-container');
+    if (!container) return;
+    
+    let progressEl = container.querySelector('.lf-chapter-player-progress');
+    const timeStr = formatSeconds(time);
+    const durationStr = duration > 0 ? formatSeconds(duration) : null;
+    const text = durationStr ? `Просмотрено ${timeStr} из ${durationStr}` : `Остановился на ${timeStr}`;
+    
+    if (progressEl) {
+      progressEl.innerHTML = `
+        <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
+        ${text}
+      `;
+    } else {
+      progressEl = document.createElement('span');
+      progressEl.className = 'lf-chapter-player-progress';
+      progressEl.title = 'Прогресс воспроизведения';
+      progressEl.innerHTML = `
+        <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
+        ${text}
+      `;
+      container.appendChild(progressEl);
+    }
+
+    if (checkbox.checked) {
+      progressEl.style.display = 'none';
+    } else {
+      progressEl.style.display = '';
+    }
+  }
+
+  // Получение уникального ключа плеера
+  function getPlayerUniqueId(player) {
+    if (player.tagName === 'AUDIO') {
+      const src = player.getAttribute('src');
+      if (src) {
+        try {
+          const url = new URL(src);
+          return 'audio_' + url.pathname.split('/').pop();
+        } catch (e) {
+          return 'audio_' + src;
+        }
+      }
+    } else if (player.tagName === 'VIDEO') {
+      const playerWrapper = getClosestElement(player, '.player-wrapper, [class*="VideoPlayer_root"], [data-video-id], vk-video-player');
+      if (playerWrapper) {
+        const videoId = playerWrapper.getAttribute('data-video-id');
+        if (videoId) return 'video_' + videoId;
+      }
+      const postNode = getClosestElement(player, '[class*="Post-scss--module_root"]');
+      if (postNode) {
+        const link = postNode.querySelector('a[href*="/posts/"]');
+        if (link) {
+          const match = link.href.match(/posts\/([a-zA-Z0-9_-]+)/);
+          if (match) return 'video_post_' + match[1];
+        }
+      }
+      const src = player.getAttribute('src');
+      if (src) return 'video_src_' + src;
+    }
+    return null;
+  }
+
+  // Настройка слушателей на конкретный плеер
+  function trackPlayerProgress(player) {
+    if (!state.settings.savePlayerTime) return;
+
+    setTimeout(() => {
+      const uniqueId = getPlayerUniqueId(player);
+      if (!uniqueId) return;
+
+      const saved = state.playerTimestamps[uniqueId];
+      let savedTime = null;
+      if (saved) {
+        if (typeof saved === 'number') {
+          savedTime = saved;
+        } else if (typeof saved === 'object' && typeof saved.time === 'number') {
+          savedTime = saved.time;
+        }
+      }
+      if (savedTime !== null && typeof savedTime === 'number') {
+        if (player.currentTime < 1) {
+          player.currentTime = savedTime;
+        }
+      }
+
+      let previouslySavedTimestamp = savedTime || 0;
+
+      const saveTimestamp = () => {
+        if (!state.settings.savePlayerTime) return;
+        
+        const currentTimestamp = player.currentTime;
+        const duration = player.duration;
+        
+        if (duration <= 60) return;
+        if (Math.abs(currentTimestamp - previouslySavedTimestamp) < 10) return;
+        if (currentTimestamp <= 10 || (duration && duration - currentTimestamp <= 10)) return;
+
+        const postId = getPostIdForPlayer(player);
+
+        state.playerTimestamps[uniqueId] = {
+          time: currentTimestamp,
+          duration: duration,
+          postId: postId,
+          updatedAt: Date.now()
+        };
+        previouslySavedTimestamp = currentTimestamp;
+        saveStateToStorage();
+        if (postId) {
+          updateChapterProgressInUI(postId, currentTimestamp, duration);
+        }
+      };
+
+      player.addEventListener('timeupdate', saveTimestamp);
+      player.addEventListener('pause', saveTimestamp);
+      
+      player.addEventListener('ended', () => {
+        if (!state.settings.savePlayerTime) return;
+        if (state.playerTimestamps[uniqueId]) {
+          delete state.playerTimestamps[uniqueId];
+          saveStateToStorage();
+        }
+        const postId = getPostIdForPlayer(player);
+        if (postId) {
+          const checkbox = document.querySelector(`.lf-chapter-checkbox[data-post-id="${postId}"]`);
+          if (checkbox) {
+            const row = checkbox.closest('.lf-chapter-row');
+            if (row) {
+              const progressEl = row.querySelector('.lf-chapter-player-progress');
+              if (progressEl) progressEl.remove();
+            }
+          }
+        }
+      });
+    }, 1000);
+  }
+
+  // Поиск новых плееров на странице
+  function initPlayerTracking() {
+    if (!state.settings.savePlayerTime) return;
+
+    const mediaPlayers = document.querySelectorAll('audio, video');
+    mediaPlayers.forEach(player => {
+      if (!player.dataset.lfTracked) {
+        player.dataset.lfTracked = 'true';
+        trackPlayerProgress(player);
+      }
+    });
+
+    const vkPlayerContainers = document.querySelectorAll('vk-video-player .shadow-root-container');
+    vkPlayerContainers.forEach(container => {
+      if (!container.dataset.lfTracked) {
+        if (container.shadowRoot) {
+          const shadowVideo = container.shadowRoot.querySelector('video');
+          if (shadowVideo) {
+            container.dataset.lfTracked = 'true';
+            shadowVideo.dataset.lfTracked = 'true';
+            trackPlayerProgress(shadowVideo);
+          }
+        }
+      }
     });
   }
 
