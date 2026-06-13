@@ -1,3 +1,4 @@
 tags_info.json
 .tmp/
 node_modules/
+test-results/
