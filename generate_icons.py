@@ -1,87 +1,98 @@
 import os
 from PIL import Image, ImageDraw
 
+def create_gradient_image(size, color1, color2):
+    """Создает диагональный градиентный фон"""
+    img = Image.new("RGBA", (size, size))
+    for y in range(size):
+        for x in range(size):
+            # Коэффициент интерполяции по диагонали
+            t = (x + y) / (2.0 * (size - 1)) if size > 1 else 0
+            
+            r = int(color1[0] + (color2[0] - color1[0]) * t)
+            g = int(color1[1] + (color2[1] - color1[1]) * t)
+            b = int(color1[2] + (color2[2] - color1[2]) * t)
+            a = int(color1[3] + (color2[3] - color1[3]) * t)
+            
+            img.putpixel((x, y), (r, g, b, a))
+    return img
+
 def create_icon(size):
-    # Create image with transparent background
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    # Коэффициент масштабирования
+    scale = size / 100.0
     
-    # Scale coordinates based on size
-    scale = size / 128.0
+    # 1. Создаем градиентный фон (от оранжевого к более темному оранжевому)
+    # Цвета: #FF7A00 -> #FF5C00
+    color1 = (255, 122, 0, 255)
+    color2 = (255, 92, 0, 255)
+    gradient_bg = create_gradient_image(size, color1, color2)
     
-    # 1. Background circle (dark grey with orange border)
-    # Only draw circle for larger sizes to keep 16x16 crisp
-    if size >= 48:
-        bg_margin = 4 * scale
-        draw.ellipse(
-            [bg_margin, bg_margin, size - bg_margin, size - bg_margin],
-            fill=(25, 25, 25, 255),
-            outline=(255, 87, 34, 255),
-            width=int(max(1, 3 * scale))
-        )
+    # 2. Создаем маску для скругленного квадрата (основы иконки)
+    icon_mask = Image.new("L", (size, size), 0)
+    mask_draw = ImageDraw.Draw(icon_mask)
+    # Радиус скругления около 22%
+    radius = int(size * 0.22)
+    mask_draw.rounded_rectangle([0, 0, size - 1, size - 1], radius=radius, fill=255)
     
-    # 2. Draw a stylized geometric fox face (orange, white, black details)
-    # Center of drawing area
-    cx = size / 2.0
-    cy = size / 2.0 + (5 * scale if size >= 48 else 0)
+    # Применяем маску к фону
+    final_bg = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    final_bg.paste(gradient_bg, (0, 0), icon_mask)
     
-    # Orange parts
-    orange_color = (255, 87, 34, 255) # Boosty Orange
-    # Left Ear
-    draw.polygon([
-        (cx - 35 * scale, cy - 30 * scale),
-        (cx - 15 * scale, cy - 5 * scale),
-        (cx - 30 * scale, cy + 5 * scale)
-    ], fill=orange_color)
+    # 3. Создаем маску для белой закладки с вырезанной молнией
+    bookmark_mask = Image.new("L", (size, size), 0)
+    b_draw = ImageDraw.Draw(bookmark_mask)
     
-    # Right Ear
-    draw.polygon([
-        (cx + 35 * scale, cy - 30 * scale),
-        (cx + 15 * scale, cy - 5 * scale),
-        (cx + 30 * scale, cy + 5 * scale)
-    ], fill=orange_color)
+    # Координаты закладки
+    left = 32 * scale
+    right = 68 * scale
+    top = 18 * scale
+    bottom = 80 * scale
+    top_radius = 4 * scale
     
-    # Face main shield
-    draw.polygon([
-        (cx, cy + 25 * scale),       # Nose tip
-        (cx - 30 * scale, cy - 5 * scale), # Left cheek
-        (cx, cy - 15 * scale),       # Forehead top
-        (cx + 30 * scale, cy - 5 * scale)  # Right cheek
-    ], fill=orange_color)
+    # Рендерим закладку по частям
+    # Верхняя скругленная часть
+    b_draw.rounded_rectangle([left, top, right, 60 * scale], radius=int(top_radius), fill=255)
+    # Нижнее прямоугольное продолжение
+    b_draw.rectangle([left, 60 * scale - top_radius, right, bottom], fill=255)
+    # Вычитаем треугольный вырез снизу
+    b_draw.polygon([
+        (left, bottom + 1),
+        (50 * scale, 67 * scale),
+        (right, bottom + 1)
+    ], fill=0)
     
-    # White cheek accents (inner face)
-    white_color = (240, 240, 240, 255)
-    draw.polygon([
-        (cx, cy + 25 * scale),
-        (cx - 20 * scale, cy),
-        (cx, cy - 5 * scale)
-    ], fill=white_color)
+    # Вычитаем молнию из закладки
+    lightning_points = [
+        (47 * scale, 24 * scale),
+        (57 * scale, 24 * scale),
+        (41 * scale, 48 * scale),
+        (49 * scale, 48 * scale),
+        (44 * scale, 76 * scale),
+        (59 * scale, 46 * scale),
+        (51 * scale, 46 * scale)
+    ]
+    b_draw.polygon(lightning_points, fill=0)
     
-    draw.polygon([
-        (cx, cy + 25 * scale),
-        (cx + 20 * scale, cy),
-        (cx, cy - 5 * scale)
-    ], fill=white_color)
+    # Создаем изображение белой закладки
+    white_bookmark = Image.new("RGBA", (size, size), (255, 255, 255, 255))
     
-    # Nose (black)
-    draw.polygon([
-        (cx - 4 * scale, cy + 21 * scale),
-        (cx + 4 * scale, cy + 21 * scale),
-        (cx, cy + 25 * scale)
-    ], fill=(30, 30, 30, 255))
+    # Накладываем закладку на подготовленный фон
+    final_icon = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    final_icon.paste(final_bg, (0, 0))
+    final_icon.paste(white_bookmark, (0, 0), bookmark_mask)
     
-    # Save the file
+    # Сохраняем файл
     filename = f"icon{size}.png"
-    img.save(filename, "PNG")
-    print(f"Generated {filename}")
+    final_icon.save(filename, "PNG")
+    print(f"Сгенерирована иконка: {filename} ({size}x{size})")
 
 if __name__ == "__main__":
-    # Create directory for icons if not exists
+    # Создаем папку icons, если ее нет
     os.makedirs("icons", exist_ok=True)
     os.chdir("icons")
     
-    # Generate 16, 48, 128
+    # Генерация иконок для расширения Chrome
     create_icon(16)
     create_icon(48)
     create_icon(128)
-    print("All icons generated successfully!")
+    print("Все иконки успешно сгенерированы!")
