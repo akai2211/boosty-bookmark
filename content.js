@@ -2882,4 +2882,18 @@
   } else {
     init();
   }
+
+  // Экспорт для среды тестирования (Node.js/Vitest)
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      state,
+      ensureUserData,
+      formatDate,
+      arePostsEqual,
+      getGroupedTitles,
+      BLOG_SLUG,
+      TAGS_BLACKLIST,
+      TAB_NAMES
+    };
+  }
 })();
