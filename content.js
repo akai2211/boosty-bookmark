@@ -2065,11 +2065,14 @@
           </div>
         </div>
 
-        <!-- Инфо о расширении -->
-        <div class="lf-settings-section" style="font-size: 11px; color: var(--lf-text-muted); line-height: 1.5;">
-          <div><strong>Название:</strong> Boosty Bookmark</div>
-          <div><strong>Версия:</strong> 1.0</div>
-          <div style="margin-top: 8px;">Разработано для быстрого и удобного отслеживания глав на странице автора lightfoxmanga.</div>
+        <!-- О расширении -->
+        <div class="lf-settings-section" style="padding: 0; border: none; background: none;">
+          <button id="lf-about-btn" class="lf-btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; padding: 8px 12px; font-weight: 600; margin: 0;">
+            <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+            </svg>
+            О расширении
+          </button>
         </div>
 
         <div id="lf-delete-container" style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
@@ -2345,6 +2348,89 @@
         render();
       });
     }
+
+    // Кнопка перехода в раздел "О расширении и авторе"
+    const aboutBtn = document.getElementById('lf-about-btn');
+    if (aboutBtn) {
+      aboutBtn.addEventListener('click', () => {
+        state.ui.activeTab = 'about';
+        render();
+      });
+    }
+  }
+
+  // -------------------------------------------------------------
+  // ОТРИСОВКА РАЗДЕЛА О РАСШИРЕНИИ И АВТОРЕ
+  // -------------------------------------------------------------
+  function renderAboutContent() {
+    const container = document.getElementById('lf-body-content');
+    if (!container) return;
+    
+    // Сбрасываем скролл наверх
+    container.scrollTop = 0;
+
+    container.innerHTML = `
+      <div class="lf-detail" style="gap: 8px;">
+        <div class="lf-detail-back" id="lf-about-back" style="margin-bottom: 4px;">
+          <svg viewBox="0 0 24 24">
+            <path d="M20,11H7.83L13.41,5.41L12,4L4,12L12,20L13.41,18.59L7.83,13H20V11Z" />
+          </svg>
+          Назад к настройкам
+        </div>
+
+        <!-- Единая карточка о расширении -->
+        <div class="lf-settings-section" style="padding: 10px; display: flex; flex-direction: column; gap: 10px; line-height: 1.5; font-size: 12px;">
+          <div>
+            <strong style="font-size: 14px; color: var(--lf-text);">Boosty Bookmark</strong>
+            <span style="font-size: 10px; color: var(--lf-text-muted); margin-left: 6px;">v1.0</span>
+          </div>
+          
+          <div style="color: var(--lf-text-muted);">
+            Удобная библиотека для отслеживания прогресса озвучек и других постов на Boosty. Позволяет структурировать публикации по произведениям, отмечать прочитанные главы и сохранять личные заметки (временно адаптировано только под автора <em>lightfoxmanga</em>).
+          </div>
+
+          <div style="border-top: 1px solid var(--lf-border); padding-top: 8px; font-size: 11px; color: var(--lf-text-muted); display: flex; flex-direction: column; gap: 4px; line-height: 1.4;">
+            <div>Автор и разработчик: <strong style="color: var(--lf-text);">Akai</strong></div>
+            <div>Лицензия: <strong style="color: var(--lf-text);">MIT</strong></div>
+            <div>Конфиденциальность: <strong style="color: var(--lf-text);">Данные хранятся локально</strong></div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: var(--lf-text-muted);">
+                <path d="M12,2A10,10 0 0,0 2,12C2,16.42 4.87,20.17 8.84,21.5C9.34,21.58 9.5,21.27 9.5,21C9.5,20.77 9.5,20.14 9.5,19.31C6.73,19.91 6.14,17.97 6.14,17.97C5.68,16.81 5.03,16.5 5.03,16.5C4.12,15.88 5.1,15.9 5.1,15.9C6.1,15.97 6.63,16.93 6.63,16.93C7.5,18.45 8.97,18 9.54,17.76C9.63,17.11 9.89,16.67 10.17,16.42C7.95,16.17 5.62,15.31 5.62,11.5C5.62,10.39 6,9.5 6.65,8.79C6.55,8.54 6.2,7.5 6.75,6.15C6.75,6.15 7.59,5.88 9.5,7.17C10.29,6.95 11.15,6.84 12,6.84C12.85,6.84 13.71,6.95 14.5,7.17C16.41,5.88 17.25,6.15 17.25,6.15C17.8,7.5 17.45,8.54 17.35,8.79C18,9.5 18.38,10.39 18.38,11.5C18.38,15.32 16.04,16.16 13.81,16.41C14.17,16.72 14.5,17.33 14.5,18.26C14.5,19.6 14.5,20.68 14.5,21C14.5,21.27 14.66,21.59 15.17,21.5C19.14,20.16 22,16.42 22,12A10,10 0 0,0 12,2Z" />
+              </svg>
+              <a href="https://github.com/akai2211/boosty-bookmark" target="_blank" style="color: var(--lf-primary); text-decoration: none; font-weight: 600;">GitHub Репозиторий</a>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: var(--lf-text-muted);">
+                <path d="M20,2H4C2.9,2,2,2.9,2,4v18l4-4h14c1.1,0,2-0.9,2-2V4C22,2.9,21.1,2,20,2z M12,14c-1.1,0-2-0.9-2-2c0-1.1,0.9-2,2-2s2,0.9,2,2C14,13.1,13.1,14,12,14z M13,9h-2V5h2V9z" />
+              </svg>
+              <a href="https://github.com/akai2211/boosty-bookmark/issues" target="_blank" style="color: var(--lf-primary); text-decoration: none; font-weight: 600;">Связаться с автором / Предложить идею</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Поддержать проект -->
+        <div class="lf-settings-section" style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--lf-text-muted);">Поддержать проект</div>
+          
+          <div style="display: flex; gap: 8px;">
+            <a href="https://www.donationalerts.com/r/your_username" target="_blank" class="lf-btn-secondary" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; margin: 0; font-size: 11px; padding: 6px 10px; font-weight: 600; background-color: rgba(238, 120, 41, 0.08); border-color: rgba(238, 120, 41, 0.3); color: #ee7829;">
+              DonationAlerts
+            </a>
+            <a href="https://yoomoney.ru/to/your_yoomoney_id" target="_blank" class="lf-btn-secondary" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; margin: 0; font-size: 11px; padding: 6px 10px; font-weight: 600; background-color: rgba(139, 63, 253, 0.08); border-color: rgba(139, 63, 253, 0.3); color: #8b3ffd;">
+              ЮMoney
+            </a>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('lf-about-back').addEventListener('click', () => {
+      state.ui.activeTab = 'settings';
+      render();
+    });
   }
 
   // -------------------------------------------------------------
@@ -2353,6 +2439,11 @@
   function renderListContent() {
     const container = document.getElementById('lf-body-content');
     if (!container) return;
+
+    if (state.ui.activeTab === 'about') {
+      renderAboutContent();
+      return;
+    }
     
     if (state.ui.activeTab === 'settings') {
       renderSettingsContent();
