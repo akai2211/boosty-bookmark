@@ -2,15 +2,15 @@
 
 Мы успешно создали и протестировали Chrome-расширение, помогающее отслеживать прогресс просмотра видеороликов и озвучек манхвы и маньхуа на странице автора `lightfoxmanga` на Boosty.
 
-Все файлы расширения находятся в вашей рабочей директории: [Boosty Bookmark](file:///home/akai/projects/LightFox_Boosty_Bookmark).
+Все файлы расширения находятся в вашей рабочей директории: [Boosty Bookmark](file:///home/akai/projects/boosty-bookmark).
 
 ---
 
 ## Архитектура и созданные файлы
 
-1.  **[manifest.json](file:///home/akai/projects/LightFox_Boosty_Bookmark/manifest.json)**
+1.  **[manifest.json](file:///home/akai/projects/boosty-bookmark/manifest.json)**
     Конфигурационный файл Manifest V3. Настроен на запуск расширения только на страницах `https://boosty.to/lightfoxmanga*`. Запрашивает разрешения `storage` и `unlimitedStorage` для надежного локального хранения базы постов и прогресса.
-2.  **[content.js](file:///home/akai/projects/LightFox_Boosty_Bookmark/content.js)**
+2.  **[content.js](file:///home/akai/projects/boosty-bookmark/content.js)**
     Основной скрипт расширения. Он отвечает за:
     *   Первичную фоновую загрузку всех 1250+ постов с API Boosty и их кэширование.
     *   Фоновую быструю синхронизацию новых глав и актуализации лайков (загружает только первую страницу при открытии).
@@ -18,10 +18,10 @@
     *   Синхронизацию прогресса через лайки (`isLiked`) и ручные чекбоксы.
     *   Автосохраняемый блокнот для заметок по каждому произведению.
     *   Управление динамическим интерфейсом.
-3.  **[styles.css](file:///home/akai/projects/LightFox_Boosty_Bookmark/styles.css)**
+3.  **[styles.css](file:///home/akai/projects/boosty-bookmark/styles.css)**
     Стили интерфейса. Наследуют шрифты и нативно подстраиваются под темный или светлый фон Boosty (поддержка темной темы сайта). Используют эффект матового стекла (glassmorphism) и плавные переходы.
-4.  **[icons/](file:///home/akai/projects/LightFox_Boosty_Bookmark/icons/)**
-    Папка с PNG-иконками расширения трех обязательных размеров (16x16, 48x48, 128x128), сгенерированными скриптом **[generate_icons.py](file:///home/akai/projects/LightFox_Boosty_Bookmark/generate_icons.py)**.
+4.  **[icons/](file:///home/akai/projects/boosty-bookmark/icons/)**
+    Папка с PNG-иконками расширения трех обязательных размеров (16x16, 48x48, 128x128), сгенерированными скриптом **[generate_icons.py](file:///home/akai/projects/boosty-bookmark/generate_icons.py)**.
 
 ---
 
@@ -33,7 +33,7 @@
 2.  В правом верхнем углу страницы включите переключатель **«Режим разработчика»** (Developer mode).
 3.  В левом верхнем углу нажмите появившуюся кнопку **«Загрузить распакованное расширение»** (Load unpacked).
 4.  В открывшемся окне выбора папки выберите директорию проекта:
-    `/home/akai/projects/LightFox_Boosty_Bookmark`
+    `/home/akai/projects/boosty-bookmark`
 5.  Расширение успешно загрузится и появится в списке.
 6.  Перейдите на страницу **`https://boosty.to/lightfoxmanga`**. Справа по центру экрана появится оранжевая плавающая кнопка-триггер.
 

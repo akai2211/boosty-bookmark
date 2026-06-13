@@ -1,5 +1,5 @@
 {
-  "name": "lightfox_boosty_bookmark",
+  "name": "boosty-bookmark",
   "version": "1.0.0",
   "description": "",
   "main": "content.js",
@@ -10,15 +10,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/akai2211/LightFox_Boosty_Bookmark.git"
+    "url": "git+https://github.com/akai2211/boosty-bookmark.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/akai2211/LightFox_Boosty_Bookmark/issues"
+    "url": "https://github.com/akai2211/boosty-bookmark/issues"
   },
-  "homepage": "https://github.com/akai2211/LightFox_Boosty_Bookmark#readme",
+  "homepage": "https://github.com/akai2211/boosty-bookmark#readme",
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "jsdom": "^29.1.1",
