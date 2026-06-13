@@ -1623,14 +1623,14 @@
                 </svg>
               </button>
               <div class="lf-dropdown-content" id="lf-sort-dropdown" style="right: 0; min-width: 190px;">
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'name_asc' ? 'lf-active' : ''}" data-sort="name_asc">По имени (А-Я)</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'name_desc' ? 'lf-active' : ''}" data-sort="name_desc">По имени (Я-А)</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'new_desc' ? 'lf-active' : ''}" data-sort="new_desc">По новизне (сначала новые)</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'new_asc' ? 'lf-active' : ''}" data-sort="new_asc">По новизне (сначала старые)</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'chapters_desc' ? 'lf-active' : ''}" data-sort="chapters_desc">По главам (много)</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'chapters_asc' ? 'lf-active' : ''}" data-sort="chapters_asc">По главам (мало)</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'progress_desc' ? 'lf-active' : ''}" data-sort="progress_desc">По прогрессу (много)</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'progress_asc' ? 'lf-active' : ''}" data-sort="progress_asc">По прогрессу (мало)</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'name_asc' ? 'lf-active' : ''}" data-sort="name_asc">По названию: А → Я</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'name_desc' ? 'lf-active' : ''}" data-sort="name_desc">По названию: Я → А</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'new_desc' ? 'lf-active' : ''}" data-sort="new_desc">Сначала новые</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'new_asc' ? 'lf-active' : ''}" data-sort="new_asc">Сначала старые</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'chapters_desc' ? 'lf-active' : ''}" data-sort="chapters_desc">Больше глав</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'chapters_asc' ? 'lf-active' : ''}" data-sort="chapters_asc">Меньше глав</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'progress_desc' ? 'lf-active' : ''}" data-sort="progress_desc">Прогресс выше</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'progress_asc' ? 'lf-active' : ''}" data-sort="progress_asc">Прогресс ниже</button>
               </div>
             </div>
           </div>
