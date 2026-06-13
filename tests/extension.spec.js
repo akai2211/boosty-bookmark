@@ -174,4 +174,125 @@ test.describe('E2E-тесты расширения Boosty Bookmark', () => {
     const checkbox2 = chapter2.locator('.lf-chapter-checkbox');
     await expect(checkbox2).toBeChecked();
   });
+
+  test('Поиск должен фильтровать тайтлы и раскрывать группы', async () => {
+    await page.goto('https://boosty.to/lightfoxmanga');
+    await page.click('#lf-trigger-btn');
+
+    // Запускаем синхронизацию
+    await page.click('#lf-empty-sync-btn');
+    await expect(page.locator('.lf-loading-overlay')).toBeHidden({ timeout: 15000 });
+
+    // Кликаем по вкладке "Все", чтобы увидеть наш тайтл
+    await page.locator('.lf-tab-btn:has-text("Все")').click();
+
+    // Вводим поисковый запрос
+    const searchInput = page.locator('#lf-search');
+    await searchInput.fill('бездельника');
+
+    // Кнопка очистки должна стать видимой
+    const clearBtn = page.locator('#lf-search-clear');
+    await expect(clearBtn).toBeVisible();
+
+    // При активном поиске группа должна быть раскрыта автоматически,
+    // проверяем видимость тайтла без клика по заголовку группы
+    const mangaTitle = page.locator('.lf-manga-title:has-text("Реинкарнация бездельника")').first();
+    await expect(mangaTitle).toBeVisible();
+
+    // Очищаем поиск через кнопку сброса
+    await clearBtn.click();
+    await expect(searchInput).toHaveValue('');
+    await expect(clearBtn).not.toBeVisible();
+  });
+
+  test('Блокнот должен сохранять заметки для тайтла', async () => {
+    await page.goto('https://boosty.to/lightfoxmanga');
+    await page.click('#lf-trigger-btn');
+
+    // Синхронизируем
+    await page.click('#lf-empty-sync-btn');
+    await expect(page.locator('.lf-loading-overlay')).toBeHidden({ timeout: 15000 });
+
+    // Открываем группу "Все" и тайтл
+    await page.locator('.lf-tab-btn:has-text("Все")').click();
+    await page.locator('.lf-group-header-left span', { hasText: 'Все' }).first().click();
+    await page.locator('.lf-manga-title:has-text("Реинкарнация бездельника")').first().click();
+
+    // Пишем заметку в textarea
+    const textarea = page.locator('#lf-notes-textarea');
+    await expect(textarea).toBeVisible();
+    await textarea.fill('Тестовая заметка для проверки блокнота');
+    // Имитируем уход фокуса (blur) для автосохранения
+    await textarea.blur();
+
+    // Возвращаемся назад
+    await page.click('#lf-detail-back');
+
+    // Снова открываем тайтл и проверяем, что заметка сохранилась
+    await page.locator('.lf-manga-title:has-text("Реинкарнация бездельника")').first().click();
+    await expect(textarea).toHaveValue('Тестовая заметка для проверки блокнота');
+  });
+
+  test('Изменение статуса отслеживания тайтла', async () => {
+    await page.goto('https://boosty.to/lightfoxmanga');
+    await page.click('#lf-trigger-btn');
+
+    // Синхронизируем
+    await page.click('#lf-empty-sync-btn');
+    await expect(page.locator('.lf-loading-overlay')).toBeHidden({ timeout: 15000 });
+
+    // Открываем тайтл
+    await page.locator('.lf-tab-btn:has-text("Все")').click();
+    await page.locator('.lf-group-header-left span', { hasText: 'Все' }).first().click();
+    await page.locator('.lf-manga-title:has-text("Реинкарнация бездельника")').first().click();
+
+    // Выбираем статус "Смотрю"
+    const statusSelect = page.locator('#lf-status-select');
+    await statusSelect.selectOption('watching');
+
+    // Возвращаемся назад
+    await page.click('#lf-detail-back');
+
+    // Переключаемся на вкладку "Смотрю"
+    await page.locator('.lf-tab-btn:has-text("Смотрю")').click();
+
+    // Находим тайтл во вкладке "Смотрю"
+    const mangaTitle = page.locator('.lf-manga-title:has-text("Реинкарнация бездельника")').first();
+    await expect(mangaTitle).toBeVisible();
+  });
+
+  test('Сброс данных с двухэтапным подтверждением', async () => {
+    await page.goto('https://boosty.to/lightfoxmanga');
+    await page.click('#lf-trigger-btn');
+
+    // Синхронизируем
+    await page.click('#lf-empty-sync-btn');
+    await expect(page.locator('.lf-loading-overlay')).toBeHidden({ timeout: 15000 });
+
+    // Переходим в настройки
+    await page.click('#lf-settings-btn');
+
+    // Нажимаем на кнопку сброса в первый раз
+    const deleteBtn = page.locator('#lf-delete-data-btn');
+    await expect(deleteBtn).toBeVisible();
+    await deleteBtn.click();
+
+    // Кнопка должна изменить текст и появиться кнопка "Отмена"
+    await expect(deleteBtn).toHaveText('Вы точно уверены? Нажмите для удаления');
+    const cancelBtn = page.locator('#lf-delete-cancel-btn');
+    await expect(cancelBtn).toBeVisible();
+
+    // Нажимаем отмену и проверяем сброс состояния подтверждения
+    await cancelBtn.click();
+    await expect(deleteBtn).toHaveText('Удалить сохранённые данные');
+    await expect(cancelBtn).not.toBeVisible();
+
+    // Нажимаем еще раз и подтверждаем удаление (второй клик по той же кнопке)
+    await deleteBtn.click();
+    await deleteBtn.click();
+
+    // Сайдбар должен вернуться к начальному состоянию с кнопкой запуска
+    const startSyncBtn = page.locator('#lf-empty-sync-btn');
+    await expect(startSyncBtn).toBeVisible();
+  });
 });
