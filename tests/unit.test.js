@@ -98,5 +98,16 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
       expect(announcements).toBeDefined();
       expect(announcements.posts.length).toBe(1);
     });
+
+    it('должен автоматически переносить полностью озвученный и полностью просмотренный тайтл в статус completed', () => {
+      content.state.posts = [
+        { id: 'post-1', title: 'Реинкарнация бездельника — Конец', publishTime: 100, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: true }
+      ];
+
+      const grouped = content.getGroupedTitles();
+      const reincarnation = grouped.find(g => g.name === 'Реинкарнация');
+      expect(reincarnation).toBeDefined();
+      expect(reincarnation.status).toBe('completed');
+    });
   });
 });

@@ -18,6 +18,7 @@
         "https://boosty.to/*"
       ],
       "js": [
+        "jszip.min.js",
         "content.js"
       ],
       "css": [

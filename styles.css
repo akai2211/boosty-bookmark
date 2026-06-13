@@ -554,12 +554,12 @@
   text-decoration: none !important;
   border-bottom: none !important;
   box-shadow: none !important;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   transition: color 0.2s;
   overflow: hidden;
-  width: 100%;
+  max-width: 100%;
 }
 
 .lf-detail-title-link:hover {
@@ -1100,6 +1100,48 @@
   border-color: rgba(211, 47, 47, 0.5) !important;
   color: rgba(211, 47, 47, 1) !important;
   background-color: rgba(211, 47, 47, 0.05) !important;
+}
+
+/* Предупреждение о бета-версии */
+.lf-beta-warning {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  background-color: rgba(238, 120, 41, 0.1);
+  border: 1px solid var(--lf-primary);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: -6px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--lf-text-color);
+  animation: lfFadeIn 0.2s ease-out;
+}
+
+.lf-beta-warning-text {
+  flex: 1;
+  padding-right: 8px;
+}
+
+.lf-beta-warning-close {
+  background: none;
+  border: none;
+  color: var(--lf-text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  width: 16px;
+}
+
+.lf-beta-warning-close:hover {
+  color: var(--lf-primary);
 }
 
 

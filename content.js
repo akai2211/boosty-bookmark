@@ -105,8 +105,8 @@
       zoom: 1.25,         // Коэффициент масштаба боковой панели (соответствует 100% в UI)
       zoomMigrated: true, // Флаг выполненной миграции масштаба
       sidebarOpen: false, // Состояние открытости панели (сохраняется)
-      openTagsInCurrentTab: true, // Открывать теги в текущей вкладке
-      openChaptersInFeed: true, // Искать и открывать главы в ленте тайтла
+      openTitlesInCurrentTab: true, // Открывать тайтлы в текущей вкладке
+      openChaptersInFeed: false, // Искать и открывать главы в ленте тайтла (Бета)
       titleSort: 'name_asc' // Сортировка тайтлов: 'name_asc', 'name_desc', 'new_desc', 'new_asc', 'chapters_desc', 'chapters_asc', 'progress_desc', 'progress_asc'
     },
     
@@ -119,7 +119,8 @@
       sortAsc: true,         // Сортировка глав: true - сначала старые (1-10, 11-20), false - новые
       isSyncing: false,      // Флаг активного процесса загрузки всей базы
       syncProgress: 0,
-      tabOrderExpanded: false // По умолчанию свернут порядок вкладок
+      tabOrderExpanded: false, // По умолчанию свернут порядок вкладок
+      syncBackupExpanded: false // По умолчанию свернута секция синхронизации и бэкапа
     }
   };
 
@@ -167,8 +168,16 @@
     const interval = setInterval(() => {
       attempts++;
 
-      // Ищем ссылку на этот пост в ленте
-      const linkElement = document.querySelector(`a[href*="${postId}" i]`);
+      // Ищем ссылку на этот пост в ленте (исключая панель расширения)
+      const allLinks = document.querySelectorAll(`a[href*="${postId}" i]`);
+      let linkElement = null;
+      const sidebar = document.getElementById('lf-sidebar');
+      for (const link of allLinks) {
+        if (sidebar && sidebar.contains(link)) continue;
+        linkElement = link;
+        break;
+      }
+
       if (linkElement) {
         clearInterval(interval);
 
@@ -435,9 +444,9 @@
     };
     window.addEventListener('beforeunload', eventHandlers.beforeunload);
 
-    // Перехват кликов по тегам на самом сайте Boosty для открытия в текущей вкладке (SPA-переход)
+    // Перехват кликов по тайтлам на самом сайте Boosty для открытия в текущей вкладке (SPA-переход)
     eventHandlers.tagClickHandler = (e) => {
-      if (!state.settings.openTagsInCurrentTab) return;
+      if (!state.settings.openTitlesInCurrentTab) return;
       
       const link = e.target.closest('a');
       if (!link) return;
@@ -501,9 +510,15 @@
           state.blogDescriptionLinks = saved.blogDescriptionLinks || [];
           if (saved.settings) {
             state.settings = { ...state.settings, ...saved.settings };
-            // Миграция openTagsInNewTab -> openTagsInCurrentTab
-            if (saved.settings.openTagsInNewTab !== undefined && saved.settings.openTagsInCurrentTab === undefined) {
-              state.settings.openTagsInCurrentTab = !saved.settings.openTagsInNewTab;
+            // Миграция openTagsInCurrentTab -> openTitlesInCurrentTab
+            if (saved.settings.openTagsInCurrentTab !== undefined && saved.settings.openTitlesInCurrentTab === undefined) {
+              state.settings.openTitlesInCurrentTab = saved.settings.openTagsInCurrentTab;
+              delete state.settings.openTagsInCurrentTab;
+              saveStateToStorage();
+            }
+            // Миграция openTagsInNewTab -> openTitlesInCurrentTab
+            if (saved.settings.openTagsInNewTab !== undefined && saved.settings.openTitlesInCurrentTab === undefined) {
+              state.settings.openTitlesInCurrentTab = !saved.settings.openTagsInNewTab;
               delete state.settings.openTagsInNewTab;
               saveStateToStorage();
             }
@@ -583,72 +598,173 @@
     });
   }
 
-  // Экспорт прогресса пользователя в файл JSON
+  // Экспорт прогресса пользователя в файл ZIP
   function exportUserData() {
     try {
-      const dataToExport = {
-        version: "1.0",
-        exportDate: new Date().toISOString(),
-        user_data: state.user_data,
-        settings: state.settings
-      };
-      
-      const jsonString = JSON.stringify(dataToExport, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      
-      const link = document.createElement('a');
-      const dateStr = new Date().toISOString().slice(0, 10);
-      link.href = url;
-      link.download = `boosty_bookmark_progress_${dateStr}.json`;
-      link.style.display = 'none';
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      showNotification('Прогресс экспортирован успешно!');
+      chrome.storage.local.get(null, (result) => {
+        if (chrome.runtime.lastError) {
+          console.error(chrome.runtime.lastError);
+          showNotification('Не удалось прочитать данные для бэкапа.');
+          return;
+        }
+
+        const zip = new JSZip();
+        let filesAdded = 0;
+
+        for (const [key, value] of Object.entries(result)) {
+          if (key.startsWith('lf_state_')) {
+            const slug = key.replace('lf_state_', '');
+            
+            // Для текущего канала берем самое свежее состояние из памяти
+            let channelData;
+            if (slug === BLOG_SLUG) {
+              channelData = {
+                posts: state.posts,
+                user_data: state.user_data,
+                lastVisit: state.lastVisit,
+                collapsedGroups: state.collapsedGroups,
+                blogDescriptionLinks: state.blogDescriptionLinks,
+                settings: state.settings
+              };
+            } else {
+              channelData = value;
+            }
+
+            const dataToExport = {
+              version: "2.0",
+              exportDate: new Date().toISOString(),
+              ...channelData
+            };
+
+            const jsonString = JSON.stringify(dataToExport, null, 2);
+            zip.file(`${slug}/progress.json`, jsonString);
+            filesAdded++;
+          }
+        }
+
+        // Если в хранилище вдруг нет текущего канала (хотя мы его инициализировали), добавим его
+        if (!result[`lf_state_${BLOG_SLUG}`]) {
+          const currentChannelData = {
+            version: "2.0",
+            exportDate: new Date().toISOString(),
+            posts: state.posts,
+            user_data: state.user_data,
+            lastVisit: state.lastVisit,
+            collapsedGroups: state.collapsedGroups,
+            blogDescriptionLinks: state.blogDescriptionLinks,
+            settings: state.settings
+          };
+          const jsonString = JSON.stringify(currentChannelData, null, 2);
+          zip.file(`${BLOG_SLUG}/progress.json`, jsonString);
+          filesAdded++;
+        }
+
+        zip.generateAsync({ type: 'blob' })
+          .then((content) => {
+            const url = URL.createObjectURL(content);
+            const link = document.createElement('a');
+            const dateStr = new Date().toISOString().slice(0, 10);
+            link.href = url;
+            link.download = `boosty_bookmark_backup_${dateStr}.zip`;
+            link.style.display = 'none';
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            showNotification('Прогресс экспортирован успешно в ZIP!');
+          })
+          .catch((err) => {
+            console.error('Ошибка при генерации ZIP:', err);
+            showNotification('Не удалось сгенерировать ZIP-архив.');
+          });
+      });
     } catch (e) {
       console.error('Ошибка при экспорте прогресса:', e);
       showNotification('Не удалось экспортировать прогресс.');
     }
   }
 
-  // Импорт прогресса пользователя из файла JSON
+  // Импорт прогресса пользователя из файла ZIP
   function importUserData(event) {
     const file = event.target.files[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = async function (e) {
       try {
-        const importedData = JSON.parse(e.target.result);
-        
-        // Валидация структуры импортированных данных
-        if (!importedData || typeof importedData !== 'object' || !importedData.user_data) {
-          throw new Error('Некорректная структура файла импорта');
+        const arrayBuffer = e.target.result;
+        // Загружаем ZIP с помощью библиотеки JSZip (которая внедрена через manifest)
+        const zip = await JSZip.loadAsync(arrayBuffer);
+
+        const storageUpdates = {};
+        let importedChannelsCount = 0;
+
+        // Обходим все файлы в ZIP-архиве
+        for (const [relativePath, fileEntry] of Object.entries(zip.files)) {
+          if (fileEntry.dir) continue;
+
+          // Ищем структуру вида: "имя_канала/progress.json"
+          const pathParts = relativePath.split('/');
+          if (pathParts.length === 2 && pathParts[1] === 'progress.json') {
+            const slug = pathParts[0];
+            const contentText = await fileEntry.async('text');
+            const importedData = JSON.parse(contentText);
+
+            // Валидируем структуру импортированных данных (хотя бы user_data)
+            if (importedData && typeof importedData === 'object' && importedData.user_data) {
+              const channelState = {
+                posts: importedData.posts || [],
+                user_data: importedData.user_data,
+                lastVisit: importedData.lastVisit || 0,
+                collapsedGroups: importedData.collapsedGroups || {},
+                blogDescriptionLinks: importedData.blogDescriptionLinks || [],
+                settings: importedData.settings || {}
+              };
+              storageUpdates[`lf_state_${slug}`] = channelState;
+              importedChannelsCount++;
+            }
+          }
         }
-        
-        // Перезаписываем данные прогресса и настройки
-        state.user_data = importedData.user_data;
-        if (importedData.settings) {
-          state.settings = { ...state.settings, ...importedData.settings };
+
+        if (importedChannelsCount === 0) {
+          throw new Error('В архиве не найдено корректных файлов progress.json');
         }
-        
-        await saveStateToStorage();
-        showNotification('Прогресс успешно импортирован!');
+
+        // Сохраняем все распакованные каналы в хранилище
+        await new Promise((resolve, reject) => {
+          chrome.storage.local.set(storageUpdates, () => {
+            if (chrome.runtime.lastError) {
+              reject(chrome.runtime.lastError);
+            } else {
+              resolve();
+            }
+          });
+        });
+
+        // Если в импортированных данных был текущий канал, накатываем его в активный state
+        const currentChannelKey = `lf_state_${BLOG_SLUG}`;
+        if (storageUpdates[currentChannelKey]) {
+          state.posts = storageUpdates[currentChannelKey].posts;
+          state.user_data = storageUpdates[currentChannelKey].user_data;
+          state.lastVisit = storageUpdates[currentChannelKey].lastVisit;
+          state.collapsedGroups = storageUpdates[currentChannelKey].collapsedGroups;
+          state.blogDescriptionLinks = storageUpdates[currentChannelKey].blogDescriptionLinks;
+          state.settings = { ...state.settings, ...storageUpdates[currentChannelKey].settings };
+        }
+
+        showNotification(`Прогресс успешно импортирован! Загружено каналов: ${importedChannelsCount}`);
         render();
       } catch (err) {
-        console.error('Ошибка при импорте прогресса:', err);
-        showNotification('Неверный формат файла. Импорт отклонен.');
+        console.error('Ошибка при импорте бэкапа:', err);
+        showNotification('Неверный формат файла. Убедитесь, что выбрали правильный ZIP-архив.');
       } finally {
-        // Сбрасываем значение инпута, чтобы можно было загрузить тот же файл повторно
         event.target.value = '';
       }
     };
-    
-    reader.readAsText(file);
+
+    reader.readAsArrayBuffer(file);
   }
 
   // Изменение порядка вкладок
@@ -1346,16 +1462,24 @@
         category = 'Для шейхов';
       }
       
-      // Автоматическое присвоение статуса "Смотрю", если просмотрено больше 1 поста
+      // Автоматическое присвоение статуса "Завершено" или "Смотрю" на основе прогресса
       let currentStatus = userTitleData.status || 'none';
-      if (currentStatus === 'none' && readCount > 1) {
+      if (isFullyFinished && readCount === title.posts.length && title.posts.length > 0 && (currentStatus === 'none' || currentStatus === 'watching')) {
+        currentStatus = 'completed';
+        if (!state.user_data[title.name]) {
+          state.user_data[title.name] = { status: 'completed', notes: '', readPosts: [] };
+        } else {
+          state.user_data[title.name].status = 'completed';
+        }
+        hasMigration = true;
+      } else if (currentStatus === 'none' && readCount > 1) {
         currentStatus = 'watching';
-        // Мутируем состояние, чтобы сохранить этот выбор при следующем saveStateToStorage
         if (!state.user_data[title.name]) {
           state.user_data[title.name] = { status: 'watching', notes: '', readPosts: [] };
         } else {
           state.user_data[title.name].status = 'watching';
         }
+        hasMigration = true;
       }
       
       return {
@@ -1598,7 +1722,7 @@
             </button>
           </div>
         </div>
-        <div class="lf-stats">Тайтлов: ${uniqueTagCount} | Записей: ${state.posts.length}</div>
+        <div class="lf-stats">Тайтлов: ${uniqueTagCount} | Постов: ${state.posts.length}</div>
         
         <!-- Строка поиска (отображается только в списке и не на вкладке настроек) -->
         ${(!state.ui.activeTitle && state.ui.activeTab !== 'settings') ? `
@@ -1801,38 +1925,45 @@
     container.innerHTML = `
       <div class="lf-settings-container">
         <!-- Резервное копирование -->
-        <div class="lf-settings-section">
-          <h3 class="lf-settings-title">Синхронизация и бэкап</h3>
-          <div class="lf-settings-desc" style="margin-bottom: 12px;">
-            Экспортируйте ваш прогресс в JSON-файл для резервного копирования или переноса на другое устройство.
+        <div class="lf-settings-section lf-collapsible ${state.ui.syncBackupExpanded ? 'lf-expanded' : ''}">
+          <div class="lf-settings-section-header" id="lf-toggle-sync-backup">
+            <h3 class="lf-settings-title" style="margin: 0;">Синхронизация и бэкап</h3>
+            <svg class="lf-collapse-arrow" viewBox="0 0 24 24">
+              <path d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z" />
+            </svg>
           </div>
-          <div class="lf-settings-buttons" style="margin-bottom: 16px;">
-            <button id="lf-export-btn" class="lf-btn-secondary">
-              <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor; margin-right: 4px;">
-                <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
-              </svg>
-              Экспорт
-            </button>
+          <div class="lf-settings-section-body">
+            <div class="lf-settings-desc" style="margin-bottom: 12px;">
+              Экспортируйте ваш прогресс в ZIP-архив для резервного копирования или переноса на другое устройство.
+            </div>
+            <div class="lf-settings-buttons" style="margin-bottom: 16px;">
+              <button id="lf-export-btn" class="lf-btn-secondary">
+                <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor; margin-right: 4px;">
+                  <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
+                </svg>
+                Экспорт
+              </button>
+              
+              <button id="lf-import-btn" class="lf-btn-primary">
+                <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor; margin-right: 4px;">
+                  <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
+                </svg>
+                Импорт
+              </button>
+              <input type="file" id="lf-import-input" accept=".zip" style="display: none;">
+            </div>
             
-            <button id="lf-import-btn" class="lf-btn-primary">
-              <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor; margin-right: 4px;">
-                <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
-              </svg>
-              Импорт
-            </button>
-            <input type="file" id="lf-import-input" accept=".json" style="display: none;">
-          </div>
-          
-          <div class="lf-settings-desc" style="margin-bottom: 12px;">
-            Если база отображается некорректно или вы хотите полностью обновить все посты автора с самого начала, запустите полную принудительную синхронизацию.
-          </div>
-          <div class="lf-settings-buttons">
-            <button id="lf-full-sync-btn" class="lf-btn-secondary" style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 6px;">
-              <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor;">
-                <path d="M19,8L15,12H18A6,6 0 0,1 12,18C11,18 10.1,17.65 9.35,17L7.9,18.45C9,19.45 10.45,20 12,20A8,8 0 0,0 20,12H23L19,8M6,12A6,6 0 0,1 12,6C13,6 13.9,6.35 14.65,7L16.1,5.55C15,4.55 13.55,4 12,4A8,8 0 0,0 4,12H1L5,16L9,12H6Z" />
-              </svg>
-              Полная принудительная синхронизация
-            </button>
+            <div class="lf-settings-desc" style="margin-bottom: 12px;">
+              Если база отображается некорректно или вы хотите полностью обновить все посты автора с самого начала, запустите полную принудительную синхронизацию.
+            </div>
+            <div class="lf-settings-buttons">
+              <button id="lf-full-sync-btn" class="lf-btn-secondary" style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 6px;">
+                <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor;">
+                  <path d="M19,8L15,12H18A6,6 0 0,1 12,18C11,18 10.1,17.65 9.35,17L7.9,18.45C9,19.45 10.45,20 12,20A8,8 0 0,0 20,12H23L19,8M6,12A6,6 0 0,1 12,6C13,6 13.9,6.35 14.65,7L16.1,5.55C15,4.55 13.55,4 12,4A8,8 0 0,0 4,12H1L5,16L9,12H6Z" />
+                </svg>
+                Полная принудительная синхронизация
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1849,19 +1980,25 @@
           </div>
 
           <div class="lf-settings-row">
-            <label class="lf-settings-label" for="lf-setting-open-tags">
-              Открывать теги в текущей вкладке
-              <div class="lf-settings-desc">Если отключено, теги будут открываться в новой вкладке браузера.</div>
+            <label class="lf-settings-label" for="lf-setting-open-titles">
+              Открывать тайтлы в текущей вкладке
+              <div class="lf-settings-desc">Если отключено, тайтлы будут открываться в новой вкладке браузера.</div>
             </label>
-            <input type="checkbox" id="lf-setting-open-tags" class="lf-settings-checkbox" ${state.settings.openTagsInCurrentTab ? 'checked' : ''}>
+            <input type="checkbox" id="lf-setting-open-titles" class="lf-settings-checkbox" ${state.settings.openTitlesInCurrentTab ? 'checked' : ''}>
           </div>
 
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-open-chapters-in-feed">
-              Искать главы в ленте тайтла
-              <div class="lf-settings-desc">При клике на главу переходить на страницу тайтла и скроллить к посту в ленте вместо открытия отдельной страницы.</div>
+              Искать главы в ленте тайтла (Бета)
+              <div class="lf-settings-desc">При клике на главу переходить на страницу тайтла и скроллить к посту в ленте вместо открытия отдельной страницы поста.</div>
             </label>
             <input type="checkbox" id="lf-setting-open-chapters-in-feed" class="lf-settings-checkbox" ${state.settings.openChaptersInFeed ? 'checked' : ''}>
+          </div>
+          <div id="lf-beta-warning" class="lf-beta-warning" style="display: none;">
+            <div class="lf-beta-warning-text">
+              Данная функция находится в бета-тестировании, работает не везде и может функционировать некорректно в некоторых тайтлах.
+            </div>
+            <button id="lf-beta-warning-close" class="lf-beta-warning-close" title="Закрыть предупреждение">&times;</button>
           </div>
 
           <div class="lf-settings-row">
@@ -2009,8 +2146,8 @@
               zoom: 1.25,
               zoomMigrated: true,
               sidebarOpen: true,
-              openTagsInCurrentTab: true,
-              openChaptersInFeed: true
+              openTitlesInCurrentTab: true,
+              openChaptersInFeed: false
             };
             
             // Сбрасываем временные UI-параметры
@@ -2072,12 +2209,12 @@
       showNotification(e.target.checked ? 'Автоотметка включена' : 'Автоотметка отключена');
     });
 
-    const openTagsCheckbox = document.getElementById('lf-setting-open-tags');
-    if (openTagsCheckbox) {
-      openTagsCheckbox.addEventListener('change', (e) => {
-        state.settings.openTagsInCurrentTab = e.target.checked;
+    const openTitlesCheckbox = document.getElementById('lf-setting-open-titles');
+    if (openTitlesCheckbox) {
+      openTitlesCheckbox.addEventListener('change', (e) => {
+        state.settings.openTitlesInCurrentTab = e.target.checked;
         saveStateToStorage();
-        showNotification(e.target.checked ? 'Теги открываются в текущей вкладке' : 'Теги открываются в новой вкладке');
+        showNotification(e.target.checked ? 'Тайтлы открываются в текущей вкладке' : 'Тайтлы открываются в новой вкладке');
       });
     }
 
@@ -2087,6 +2224,21 @@
         state.settings.openChaptersInFeed = e.target.checked;
         saveStateToStorage();
         showNotification(e.target.checked ? 'Включен переход к главам в ленте' : 'Включено открытие отдельных страниц глав');
+        
+        const warningBlock = document.getElementById('lf-beta-warning');
+        if (warningBlock) {
+          warningBlock.style.display = e.target.checked ? 'flex' : 'none';
+        }
+      });
+    }
+
+    const warningCloseBtn = document.getElementById('lf-beta-warning-close');
+    if (warningCloseBtn) {
+      warningCloseBtn.addEventListener('click', () => {
+        const warningBlock = document.getElementById('lf-beta-warning');
+        if (warningBlock) {
+          warningBlock.style.display = 'none';
+        }
       });
     }
 
@@ -2181,6 +2333,15 @@
     if (toggleHeader) {
       toggleHeader.addEventListener('click', () => {
         state.ui.tabOrderExpanded = !state.ui.tabOrderExpanded;
+        render();
+      });
+    }
+
+    // Переключатель сворачивания блока синхронизации и бэкапа
+    const toggleSyncBackup = document.getElementById('lf-toggle-sync-backup');
+    if (toggleSyncBackup) {
+      toggleSyncBackup.addEventListener('click', () => {
+        state.ui.syncBackupExpanded = !state.ui.syncBackupExpanded;
         render();
       });
     }
@@ -2326,8 +2487,36 @@
       return;
     }
     
-    // Для вкладок «Смотрю», «Избранное», «Завершено», «Брошено» выводим простым списком
-    if (['watching', 'favorite', 'completed', 'dropped'].includes(state.ui.activeTab)) {
+    // Для вкладки «Смотрю» отделяем завершенные тома в свернутую группу внизу
+    if (state.ui.activeTab === 'watching') {
+      const normalWatching = filtered.filter(t => !(t.isVolumeFinished && t.readCount === t.posts.length && t.posts.length > 0));
+      const volumeFinishedWatching = filtered.filter(t => t.isVolumeFinished && t.readCount === t.posts.length && t.posts.length > 0);
+
+      if (normalWatching.length > 0 || volumeFinishedWatching.length === 0) {
+        const listDiv = document.createElement('div');
+        listDiv.className = 'lf-group-container';
+        listDiv.style.backgroundColor = 'transparent';
+        listDiv.style.border = 'none';
+        
+        const listContent = document.createElement('div');
+        listContent.className = 'lf-group-list';
+        
+        normalWatching.forEach(manga => {
+          listContent.appendChild(createMangaRow(manga));
+        });
+        
+        listDiv.appendChild(listContent);
+        container.appendChild(listDiv);
+      }
+
+      if (volumeFinishedWatching.length > 0) {
+        renderGroup(container, 'Завершен том', volumeFinishedWatching);
+      }
+      return;
+    }
+
+    // Для вкладок «Избранное», «Завершено», «Брошено» выводим простым списком
+    if (['favorite', 'completed', 'dropped'].includes(state.ui.activeTab)) {
       const listDiv = document.createElement('div');
       listDiv.className = 'lf-group-container';
       listDiv.style.backgroundColor = 'transparent';
@@ -2465,7 +2654,7 @@
         const dateStr = formatDate(post.publishTime);
         
         const chapterUrl = `https://boosty.to/lightfoxmanga/posts/${post.id}`;
-        const targetAttr = state.settings.openTagsInCurrentTab ? '' : 'target="_blank"';
+        const targetAttr = state.settings.openTitlesInCurrentTab ? '' : 'target="_blank"';
         
         row.innerHTML = `
           <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? 'title="Этот пост лайкнут на Boosty"' : ''}>
@@ -2521,7 +2710,7 @@
             checkbox.dispatchEvent(new Event('change'));
           }
           
-          if (state.settings.openTagsInCurrentTab) {
+          if (state.settings.openTitlesInCurrentTab) {
             if (e.ctrlKey || e.metaKey || e.button === 1) {
               return;
             }
@@ -2604,7 +2793,7 @@
       ? `https://boosty.to/lightfoxmanga?postsTagsIds=${manga.tagId}` 
       : `https://boosty.to/lightfoxmanga?media=all&tag=${encodeURIComponent(manga.name)}`;
       
-    const targetAttr = state.settings.openTagsInCurrentTab ? '' : 'target="_blank"';
+    const targetAttr = state.settings.openTitlesInCurrentTab ? '' : 'target="_blank"';
     const isAnnouncements = manga.name === 'Объявления';
     
     container.innerHTML = `
@@ -2714,7 +2903,7 @@
     if (titleLink) {
       titleLink.addEventListener('click', (e) => {
         // Если открываем в новой вкладке (зажата клавиша Ctrl/Cmd, или средняя кнопка мыши, или настройка "открывать в текущей" выключена)
-        if (!state.settings.openTagsInCurrentTab || e.ctrlKey || e.metaKey || e.button === 1) {
+        if (!state.settings.openTitlesInCurrentTab || e.ctrlKey || e.metaKey || e.button === 1) {
           // Позволяем браузеру выполнить стандартное поведение (открыть в новой вкладке)
           return;
         }
@@ -2774,10 +2963,10 @@
 
       if (state.settings.openChaptersInFeed && !isAnnouncements) {
         chapterUrl = `${tagUrl}#post-${post.id}`;
-        targetAttr = state.settings.openTagsInCurrentTab ? '' : 'target="_blank"';
+        targetAttr = state.settings.openTitlesInCurrentTab ? '' : 'target="_blank"';
       } else {
         chapterUrl = `https://boosty.to/lightfoxmanga/posts/${post.id}`;
-        targetAttr = state.settings.openTagsInCurrentTab ? '' : 'target="_blank"';
+        targetAttr = state.settings.openTitlesInCurrentTab ? '' : 'target="_blank"';
       }
 
       row.innerHTML = `
@@ -2843,8 +3032,8 @@
           checkbox.dispatchEvent(new Event('change'));
         }
 
-        // SPA-переход, если включен openTagsInCurrentTab (для обычных глав — при openChaptersInFeed, для Объявлений — всегда)
-        const shouldSpa = state.settings.openTagsInCurrentTab && (state.settings.openChaptersInFeed || isAnnouncements);
+        // SPA-переход, если включен openTitlesInCurrentTab
+        const shouldSpa = state.settings.openTitlesInCurrentTab;
         if (shouldSpa) {
           // Исключаем открытие в новой вкладке (Ctrl/Cmd/средний клик)
           if (e.ctrlKey || e.metaKey || e.button === 1) {
