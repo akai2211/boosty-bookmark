@@ -27,7 +27,7 @@
           // Если мы сами программно кликаем по этому посту, блокируем реальный React-запрос
           // Это предотвращает дублирование (content.js уже отправил API-запрос) и откат UI из-за 404
           if (simulatedPosts.has(postId)) {
-            console.log(`[LightFox page_script] Блокируем дублирующий React-запрос ${upperMethod} для поста ${postId}`);
+            console.log(`[BoostyBookmark page_script] Блокируем дублирующий React-запрос ${upperMethod} для поста ${postId}`);
             return Promise.resolve(new Response('{}', {
               status: 200,
               headers: { 'Content-Type': 'application/json' }
@@ -38,7 +38,7 @@
           const fetchPromise = originalFetch.apply(this, arguments);
           fetchPromise.then(response => {
             if (response.ok) {
-              console.log(`[LightFox page_script] Перехвачен fetch ${upperMethod} /reaction для поста ${postId}`);
+              console.log(`[BoostyBookmark page_script] Перехвачен fetch ${upperMethod} /reaction для поста ${postId}`);
               window.postMessage({ type: LF_MSG_TYPE, postId, isLiked }, '*');
             }
           }).catch(() => {});
@@ -73,7 +73,7 @@
 
           // Если мы сами программно кликаем по этому посту, блокируем реальный XHR-запрос
           if (simulatedPosts.has(postId)) {
-            console.log(`[LightFox page_script] Блокируем дублирующий React-XHR ${method} для поста ${postId}`);
+            console.log(`[BoostyBookmark page_script] Блокируем дублирующий React-XHR ${method} для поста ${postId}`);
             Object.defineProperty(this, 'readyState', { value: 4, writable: false });
             Object.defineProperty(this, 'status', { value: 200, writable: false });
             Object.defineProperty(this, 'statusText', { value: 'OK', writable: false });
@@ -90,7 +90,7 @@
 
           this.addEventListener('load', function () {
             if (this.status >= 200 && this.status < 300) {
-              console.log(`[LightFox page_script] Перехвачен XHR ${method} /reaction для поста ${postId}`);
+              console.log(`[BoostyBookmark page_script] Перехвачен XHR ${method} /reaction для поста ${postId}`);
               window.postMessage({ type: LF_MSG_TYPE, postId, isLiked }, '*');
             }
           });
@@ -175,7 +175,7 @@
     try {
       const reactionBtn = findReactionButton(postId);
       if (!reactionBtn) {
-        console.log(`[LightFox page_script] Пост ${postId} не найден на странице`);
+        console.log(`[BoostyBookmark page_script] Пост ${postId} не найден на странице`);
         return;
       }
 
@@ -189,7 +189,7 @@
       // Ждем popover (как для постановки, так и для снятия лайка)
       const popover = await waitForReactionPopover(1500);
       if (!popover) {
-        console.warn(`[LightFox page_script] Popover реакций не появился для поста ${postId}`);
+        console.warn(`[BoostyBookmark page_script] Popover реакций не появился для поста ${postId}`);
         simulatedPosts.delete(postId);
         return;
       }
@@ -205,13 +205,13 @@
 
       const clickTarget = heartElement.closest('button, [role="button"]') || heartElement.closest('div') || heartElement;
       clickTarget.click();
-      console.log(`[LightFox page_script] Нативный клик по сердечку выполнен для поста ${postId} (shouldLike=${shouldLike})`);
+      console.log(`[BoostyBookmark page_script] Нативный клик по сердечку выполнен для поста ${postId} (shouldLike=${shouldLike})`);
 
       // Снимаем флаг блокировки через 500мс (достаточно для перехвата fetch)
       setTimeout(() => simulatedPosts.delete(postId), 500);
 
     } catch (e) {
-      console.error('[LightFox page_script] Ошибка при нативном клике:', e);
+      console.error('[BoostyBookmark page_script] Ошибка при нативном клике:', e);
       simulatedPosts.delete(postId);
     }
   }
@@ -227,5 +227,5 @@
     }
   });
 
-  console.log('[LightFox page_script] Загружен в main world — перехват fetch/XHR + обратная синхронизация активны');
+  console.log('[BoostyBookmark page_script] Загружен в main world — перехват fetch/XHR + обратная синхронизация активны');
 })();

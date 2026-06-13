@@ -1,4 +1,4 @@
-/* content.js - Помощник по отслеживанию озвучек на Boosty (LightFox Manga Assistant) */
+/* content.js - Помощник по отслеживанию озвучек на Boosty (Boosty Bookmark) */
 
 (function () {
   'use strict';
@@ -6,7 +6,7 @@
   const BLOG_SLUG = 'lightfoxmanga';
   const STORAGE_KEY = `lf_state_${BLOG_SLUG}`;
   
-  // Черный список служебных тегов (будут отфильтрованы, чтобы оставить только названия манги)
+  // Черный список служебных тегов (будут отфильтрованы, чтобы оставить только названия произведений)
   const TAGS_BLACKLIST = [
     'халява', 'новости', 'хайлайты', 'важное', 'инфо', 
     'объявление', 'анонс', 'опрос', 'стрим', 'аудио', 
@@ -281,7 +281,7 @@
       // Обработка перехваченного лайка/дизлайка с Boosty
       if (event.data.type === 'LF_REACTION_INTERCEPTED') {
         const { postId, isLiked } = event.data;
-        console.log(`[LightFox content.js] Получено сообщение от page_script: пост ${postId}, isLiked=${isLiked}`);
+        console.log(`[BoostyBookmark content.js] Получено сообщение от page_script: пост ${postId}, isLiked=${isLiked}`);
         if (postId) {
           handleInterceptedReaction(postId, isLiked);
         }
@@ -330,7 +330,7 @@
         }
       }
       
-      console.log(`[LightFox] Перехвачен лайк на Boosty: пост ${postId} — кэш обновлён`);
+      console.log(`[BoostyBookmark] Перехвачен лайк на Boosty: пост ${postId} — кэш обновлён`);
     }
   }
 
@@ -600,7 +600,7 @@
       const link = document.createElement('a');
       const dateStr = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = `lightfox_progress_${dateStr}.json`;
+      link.download = `boosty_bookmark_progress_${dateStr}.json`;
       link.style.display = 'none';
       
       document.body.appendChild(link);
@@ -717,7 +717,7 @@
         const isCurrentlyLiked = likeBtn.getAttribute('data-active') === 'true';
         if (isCurrentlyLiked !== targetLikedState) {
           likeBtn.click();
-          console.log(`[LightFox] DOM-клик лайка для поста ${postId}`);
+          console.log(`[BoostyBookmark] DOM-клик лайка для поста ${postId}`);
           return true;
         } else {
           // Уже в нужном состоянии
@@ -1575,7 +1575,7 @@
               <!-- белая закладка с вырезанной молнией -->
               <path class="lf-logo-path" fill="#ffffff" d="${BOOKMARK_SVG_PATH}" />
             </svg>
-            <h1 class="lf-title">LightFox Boosty Bookmark</h1>
+            <h1 class="lf-title">Boosty Bookmark</h1>
           </div>
           <div class="lf-header-buttons">
             <!-- Кнопка настроек -->
@@ -1607,7 +1607,7 @@
               <svg class="lf-search-icon" viewBox="0 0 24 24">
                 <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
               </svg>
-              <input type="text" id="lf-search" class="lf-search-input" placeholder="Поиск манги..." value="${escapeHtml(state.ui.searchQuery)}">
+              <input type="text" id="lf-search" class="lf-search-input" placeholder="Поиск тайтла..." value="${escapeHtml(state.ui.searchQuery)}">
               <button id="lf-search-clear" class="lf-search-clear-btn" style="${state.ui.searchQuery ? 'display: flex;' : 'display: none;'}" title="Очистить поиск">
                 <svg viewBox="0 0 24 24">
                   <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
@@ -1930,7 +1930,7 @@
 
         <!-- Инфо о расширении -->
         <div class="lf-settings-section" style="font-size: 11px; color: var(--lf-text-muted); line-height: 1.5;">
-          <div><strong>Название:</strong> LightFox Boosty Bookmark</div>
+          <div><strong>Название:</strong> Boosty Bookmark</div>
           <div><strong>Версия:</strong> 1.0</div>
           <div style="margin-top: 8px;">Разработано для быстрого и удобного отслеживания глав на странице автора lightfoxmanga.</div>
         </div>

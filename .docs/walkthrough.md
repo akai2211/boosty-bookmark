@@ -1,8 +1,8 @@
-# Результаты разработки: LightFox Boosty Bookmark
+# Результаты разработки: Boosty Bookmark
 
-Мы успешно создали и протестировали Chrome-расширение, помогающее отслеживать прогресс просмотра видеороликов и озвучек манги/манхвы на странице автора `lightfoxmanga` на Boosty.
+Мы успешно создали и протестировали Chrome-расширение, помогающее отслеживать прогресс просмотра видеороликов и озвучек манхвы и маньхуа на странице автора `lightfoxmanga` на Boosty.
 
-Все файлы расширения находятся в вашей рабочей директории: [LightFox Boosty Bookmark](file:///home/akai/projects/LightFox_Boosty_Bookmark).
+Все файлы расширения находятся в вашей рабочей директории: [Boosty Bookmark](file:///home/akai/projects/LightFox_Boosty_Bookmark).
 
 ---
 

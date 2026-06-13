@@ -1,4 +1,4 @@
-# Список задач (Task List) — LightFox Boosty Bookmark
+# Список задач (Task List) — Boosty Bookmark
 
 - [x] Сгенерировать иконки расширения (`generate_icons.py` через Python Pillow)
 - [x] Создать файл конфигурации `manifest.json`
