@@ -132,6 +132,7 @@
 
   // Конфигурация WebDAV (хранится отдельно от прогресса каналов)
   let webdavConfig = {
+    provider: 'yandex', // 'yandex' или 'webdav'
     enabled: false,
     baseUrl: '',
     username: '',
@@ -143,7 +144,7 @@
   // Инициализация/получение данных пользователя для тайтла (устраняет дублирование)
   function ensureUserData(titleName) {
     if (!state.user_data[titleName]) {
-      state.user_data[titleName] = { status: 'none', notes: '', readPosts: [] };
+      state.user_data[titleName] = { status: 'none', notes: '', readPosts: [], updatedAt: 0 };
     }
     return state.user_data[titleName];
   }
@@ -595,6 +596,18 @@
     });
   }
 
+  let webdavUploadTimeout;
+  function debouncedWebDavUpload() {
+    if (!webdavConfig.enabled || !isWebDavConfigured()) return;
+    if (state.ui.webdavSyncing || state.ui.webdavTesting) return;
+
+    clearTimeout(webdavUploadTimeout);
+    webdavUploadTimeout = setTimeout(() => {
+      if (state.ui.webdavSyncing || state.ui.webdavTesting) return;
+      performWebDavSync({ silent: true }).catch(() => {});
+    }, 20000);
+  }
+
   // Сохранение состояния в chrome.storage.local
   function saveStateToStorage() {
     return new Promise((resolve) => {
@@ -613,6 +626,7 @@
         update[STORAGE_KEY] = data;
         chrome.storage.local.set(update, () => {
           if (chrome.runtime.lastError) { resolve(); return; }
+          debouncedWebDavUpload();
           resolve();
         });
       } catch (e) {
@@ -822,7 +836,17 @@
               webdavConfig.accessCode = saved.appPassword;
             }
             delete webdavConfig.appPassword;
-            delete webdavConfig.provider;
+            
+            // Автоопределение провайдера для старых настроек
+            if (!saved.provider) {
+              if (webdavConfig.baseUrl && webdavConfig.baseUrl.includes('yandex')) {
+                webdavConfig.provider = 'yandex';
+              } else if (webdavConfig.baseUrl) {
+                webdavConfig.provider = 'webdav';
+              } else {
+                webdavConfig.provider = 'yandex';
+              }
+            }
           }
           resolve();
         });
@@ -1024,7 +1048,10 @@
     if (!syncApi) {
       throw new Error('Модуль синхронизации не загружен');
     }
-    if (!webdavConfig.baseUrl?.trim()) {
+    const isYandex = webdavConfig.provider === 'yandex';
+    const baseUrl = isYandex ? 'https://webdav.yandex.ru' : webdavConfig.baseUrl;
+
+    if (!baseUrl?.trim()) {
       throw new Error('Укажите адрес WebDAV-сервера');
     }
     if (!webdavConfig.username?.trim()) {
@@ -1034,7 +1061,7 @@
       throw new Error('Укажите код доступа');
     }
     return new syncApi.WebDavProvider({
-      baseUrl: normalizeWebDavBaseUrl(webdavConfig.baseUrl),
+      baseUrl: normalizeWebDavBaseUrl(baseUrl),
       username: webdavConfig.username.trim(),
       accessCode: webdavConfig.accessCode
     });
@@ -1069,9 +1096,11 @@
   }
 
   function isWebDavConfigured() {
+    const isYandex = webdavConfig.provider === 'yandex';
+    const hasUrl = isYandex || !!webdavConfig.baseUrl?.trim();
     return !!(
       webdavConfig.enabled &&
-      webdavConfig.baseUrl?.trim() &&
+      hasUrl &&
       webdavConfig.username?.trim() &&
       webdavConfig.accessCode
     );
@@ -1158,7 +1187,14 @@
 
     if (baseUrlInput) webdavConfig.baseUrl = baseUrlInput.value.trim();
     if (usernameInput) webdavConfig.username = usernameInput.value.trim();
-    if (accessCodeInput && accessCodeInput.value) webdavConfig.accessCode = accessCodeInput.value;
+    if (accessCodeInput) {
+      const val = accessCodeInput.value;
+      if (val === '') {
+        webdavConfig.accessCode = '';
+      } else if (val !== '••••••••') {
+        webdavConfig.accessCode = val;
+      }
+    }
     if (enabledInput) webdavConfig.enabled = enabledInput.checked;
 
     await saveWebDavConfig();
@@ -1724,6 +1760,7 @@
         if (titleName !== defaultName && state.user_data[defaultName]) {
           if (!state.user_data[titleName]) {
             state.user_data[titleName] = state.user_data[defaultName];
+            state.user_data[titleName].updatedAt = Date.now();
             delete state.user_data[defaultName];
             hasMigration = true;
           }
@@ -1864,17 +1901,19 @@
       if (isFullyFinished && readCount === title.posts.length && title.posts.length > 0 && (currentStatus === 'none' || currentStatus === 'watching')) {
         currentStatus = 'completed';
         if (!state.user_data[title.name]) {
-          state.user_data[title.name] = { status: 'completed', notes: '', readPosts: [] };
+          state.user_data[title.name] = { status: 'completed', notes: '', readPosts: [], updatedAt: Date.now() };
         } else {
           state.user_data[title.name].status = 'completed';
+          state.user_data[title.name].updatedAt = Date.now();
         }
         hasMigration = true;
       } else if (currentStatus === 'none' && readCount > 1) {
         currentStatus = 'watching';
         if (!state.user_data[title.name]) {
-          state.user_data[title.name] = { status: 'watching', notes: '', readPosts: [] };
+          state.user_data[title.name] = { status: 'watching', notes: '', readPosts: [], updatedAt: Date.now() };
         } else {
           state.user_data[title.name].status = 'watching';
+          state.user_data[title.name].updatedAt = Date.now();
         }
         hasMigration = true;
       }
@@ -2364,12 +2403,34 @@
 
             <div class="lf-settings-divider"></div>
 
-            <h4 class="lf-settings-subtitle">Облачная синхронизация (WebDAV)</h4>
+            <h4 class="lf-settings-subtitle">
+              ${webdavConfig.provider === 'yandex' ? 'Облачная синхронизация (Яндекс.Диск)' : 'Облачная синхронизация (WebDAV)'}
+            </h4>
             <div class="lf-settings-desc" style="margin-bottom: 10px;">
-              Синхронизация через ваш WebDAV-сервер (Nextcloud, Owncloud, NAS и др.) в том же ZIP-формате, что и ручной экспорт.
+              ${webdavConfig.provider === 'yandex' 
+                ? 'Синхронизация через ваш Яндекс.Диск по протоколу WebDAV в том же ZIP-формате, что и ручной экспорт.'
+                : 'Синхронизация через ваш WebDAV-сервер (Nextcloud, Owncloud, NAS и др.) в том же ZIP-формате, что и ручной экспорт.'}
               При каждом открытии панели выполняется автосинхронизация (не чаще одного раза в минуту).
             </div>
 
+            <!-- Группа выбора провайдера -->
+            <label class="lf-settings-label" style="margin-top: 8px;">Выберите облако</label>
+            <div class="lf-provider-select-container" style="display: flex; gap: 8px; margin-bottom: 12px; margin-top: 4px;">
+              <button id="lf-provider-yandex-btn" class="lf-btn-secondary ${webdavConfig.provider === 'yandex' ? 'lf-provider-active' : ''}" style="flex: 1; margin: 0; padding: 6px 12px; font-size: 12px; height: 32px;" ${state.ui.webdavSyncing || state.ui.webdavTesting ? 'disabled' : ''}>Яндекс.Диск</button>
+              <button id="lf-provider-webdav-btn" class="lf-btn-secondary ${webdavConfig.provider === 'webdav' ? 'lf-provider-active' : ''}" style="flex: 1; margin: 0; padding: 6px 12px; font-size: 12px; height: 32px;" ${state.ui.webdavSyncing || state.ui.webdavTesting ? 'disabled' : ''}>Другой WebDAV</button>
+            </div>
+
+            ${webdavConfig.provider === 'yandex' ? `
+            <details class="lf-webdav-guide">
+              <summary>Как подключить Яндекс.Диск</summary>
+              <ol class="lf-webdav-guide-list">
+                <li>Перейдите в настройки Яндекс ID в раздел <strong>«Пароли и авторизация → Пароли приложений»</strong>.</li>
+                <li>Создайте новый пароль приложения с типом <strong>«Файлы (Яндекс.Диск)»</strong>.</li>
+                <li>Введите ваше имя пользователя (логин до символа @) и сгенерированный пароль приложения ниже.</li>
+                <li>Нажмите «Проверить подключение» и убедитесь, что статус успешный.</li>
+              </ol>
+            </details>
+            ` : `
             <details class="lf-webdav-guide">
               <summary>Как подключить Nextcloud или другой WebDAV</summary>
               <ol class="lf-webdav-guide-list">
@@ -2379,26 +2440,31 @@
                 <li>Нажмите «Проверить подключение» и убедитесь, что статус успешный.</li>
               </ol>
             </details>
+            `}
 
             <div class="lf-settings-row">
               <label class="lf-settings-label" for="lf-webdav-enabled">
-                Включить синхронизацию через WebDAV
+                ${webdavConfig.provider === 'yandex' ? 'Включить синхронизацию с Яндекс.Диском' : 'Включить синхронизацию через WebDAV'}
               </label>
               <input type="checkbox" id="lf-webdav-enabled" class="lf-settings-checkbox" ${webdavConfig.enabled ? 'checked' : ''}>
             </div>
 
             <div class="lf-webdav-fields">
+              ${webdavConfig.provider === 'webdav' ? `
               <label class="lf-settings-label" for="lf-webdav-base-url">Адрес WebDAV-сервера</label>
               <input type="url" id="lf-webdav-base-url" class="lf-settings-input" value="${escapeHtml(webdavConfig.baseUrl)}" placeholder="https://cloud.example.com/remote.php/dav/files/user/" autocomplete="off">
+              ` : ''}
 
               <label class="lf-settings-label" for="lf-webdav-username" style="margin-top: 8px;">Имя пользователя</label>
-              <input type="text" id="lf-webdav-username" class="lf-settings-input" value="${escapeHtml(webdavConfig.username)}" placeholder="user" autocomplete="username">
+              <input type="text" id="lf-webdav-username" class="lf-settings-input" value="${escapeHtml(webdavConfig.username)}" placeholder="${webdavConfig.provider === 'yandex' ? 'логин на Яндексе' : 'user'}" autocomplete="username">
 
               <label class="lf-settings-label" for="lf-webdav-access-code" style="margin-top: 8px;">
                 Код доступа
-                <div class="lf-settings-desc">Сгенерированный на сервере код приложения, не пароль от аккаунта.</div>
+                <div class="lf-settings-desc">
+                  ${webdavConfig.provider === 'yandex' ? 'Сгенерированный пароль приложения Яндекс ID.' : 'Сгенерированный на сервере код приложения, не пароль от аккаунта.'}
+                </div>
               </label>
-              <input type="password" id="lf-webdav-access-code" class="lf-settings-input" value="" placeholder="${webdavConfig.accessCode ? '•••••••• (сохранён)' : 'Вставьте код доступа'}" autocomplete="new-password">
+              <input type="password" id="lf-webdav-access-code" class="lf-settings-input" value="${webdavConfig.accessCode ? '••••••••' : ''}" placeholder="Вставьте код доступа" autocomplete="new-password">
             </div>
 
             <div class="lf-settings-buttons" style="margin-top: 12px;">
@@ -2407,6 +2473,12 @@
               </button>
               <button id="lf-webdav-sync-btn" class="lf-btn-primary" ${state.ui.webdavSyncing || state.ui.webdavTesting ? 'disabled' : ''}>
                 ${state.ui.webdavSyncing ? 'Синхронизация...' : 'Синхронизировать сейчас'}
+              </button>
+            </div>
+            
+            <div style="margin-top: 8px;">
+              <button id="lf-webdav-clear-btn" class="lf-btn-secondary" style="width: 100%; border-color: rgba(211, 47, 47, 0.2); color: rgba(211, 47, 47, 0.7); margin: 0;" ${state.ui.webdavSyncing || state.ui.webdavTesting ? 'disabled' : ''}>
+                ${webdavConfig.provider === 'yandex' ? 'Очистить настройки Яндекс.Диска' : 'Очистить настройки WebDAV'}
               </button>
             </div>
 
@@ -2555,12 +2627,35 @@
     const webdavAccessCode = document.getElementById('lf-webdav-access-code');
     const webdavTestBtn = document.getElementById('lf-webdav-test-btn');
     const webdavSyncBtn = document.getElementById('lf-webdav-sync-btn');
+    const webdavClearBtn = document.getElementById('lf-webdav-clear-btn');
 
     if (webdavEnabled) {
       webdavEnabled.addEventListener('change', async (e) => {
         webdavConfig.enabled = e.target.checked;
         await saveWebDavConfig();
-        showNotification(e.target.checked ? 'Синхронизация WebDAV включена' : 'Синхронизация WebDAV отключена');
+        const label = webdavConfig.provider === 'yandex' ? 'Яндекс.Диск' : 'WebDAV';
+        showNotification(e.target.checked ? `Синхронизация ${label} включена` : `Синхронизация ${label} отключена`);
+      });
+    }
+
+    // Обработчики переключателей провайдера
+    const providerYandexBtn = document.getElementById('lf-provider-yandex-btn');
+    const providerWebdavBtn = document.getElementById('lf-provider-webdav-btn');
+
+    if (providerYandexBtn) {
+      providerYandexBtn.addEventListener('click', async () => {
+        if (webdavConfig.provider === 'yandex') return;
+        webdavConfig.provider = 'yandex';
+        await saveWebDavConfig();
+        renderSettingsContent();
+      });
+    }
+    if (providerWebdavBtn) {
+      providerWebdavBtn.addEventListener('click', async () => {
+        if (webdavConfig.provider === 'webdav') return;
+        webdavConfig.provider = 'webdav';
+        await saveWebDavConfig();
+        renderSettingsContent();
       });
     }
 
@@ -2572,8 +2667,23 @@
       webdavUsername.addEventListener('blur', saveWebDavSettingsFromForm);
     }
 
+    let codeInputChanged = false;
     if (webdavAccessCode) {
-      webdavAccessCode.addEventListener('blur', saveWebDavSettingsFromForm);
+      webdavAccessCode.addEventListener('focus', (e) => {
+        if (e.target.value === '••••••••') {
+          e.target.value = '';
+          codeInputChanged = false;
+        }
+      });
+      webdavAccessCode.addEventListener('input', () => {
+        codeInputChanged = true;
+      });
+      webdavAccessCode.addEventListener('blur', async (e) => {
+        if (e.target.value === '' && !codeInputChanged && webdavConfig.accessCode) {
+          e.target.value = '••••••••';
+        }
+        await saveWebDavSettingsFromForm();
+      });
     }
 
     if (webdavTestBtn) {
@@ -2585,6 +2695,21 @@
     if (webdavSyncBtn) {
       webdavSyncBtn.addEventListener('click', () => {
         performWebDavSync({ silent: false });
+      });
+    }
+
+    if (webdavClearBtn) {
+      webdavClearBtn.addEventListener('click', async () => {
+        const label = webdavConfig.provider === 'yandex' ? 'Яндекс.Диска' : 'WebDAV';
+        webdavConfig.enabled = false;
+        webdavConfig.baseUrl = '';
+        webdavConfig.username = '';
+        webdavConfig.accessCode = '';
+        webdavConfig.provider = 'yandex';
+        webdavConfig.lastSyncStatus = 'Настройки очищены';
+        await saveWebDavConfig();
+        showNotification(`Настройки ${label} успешно очищены`);
+        renderSettingsContent();
       });
     }
 
@@ -3332,6 +3457,7 @@
           }
           
           userData.readPosts = readPosts;
+          userData.updatedAt = Date.now();
           saveStateToStorage();
           
           if (e.target.checked) {
@@ -3519,7 +3645,9 @@
     if (statusSelect) {
       statusSelect.addEventListener('change', (e) => {
         const newStatus = e.target.value;
-        ensureUserData(manga.name).status = newStatus;
+        const userData = ensureUserData(manga.name);
+        userData.status = newStatus;
+        userData.updatedAt = Date.now();
         saveStateToStorage();
         
         // Показываем уведомление о переносе тайтла
@@ -3533,7 +3661,9 @@
     // Блокнот
     const notesTextarea = document.getElementById('lf-notes-textarea');
     notesTextarea.addEventListener('input', (e) => {
-      ensureUserData(manga.name).notes = e.target.value;
+      const userData = ensureUserData(manga.name);
+      userData.notes = e.target.value;
+      userData.updatedAt = Date.now();
       debounceSave();
     });
     

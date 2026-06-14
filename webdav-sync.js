@@ -48,16 +48,20 @@
     ]);
 
     for (const title of allTitles) {
-      const l = local?.[title] || { status: 'none', notes: '', readPosts: [] };
-      const r = remote?.[title] || { status: 'none', notes: '', readPosts: [] };
+      const l = local?.[title] || { status: 'none', notes: '', readPosts: [], updatedAt: 0 };
+      const r = remote?.[title] || { status: 'none', notes: '', readPosts: [], updatedAt: 0 };
+
+      const lTime = l.updatedAt || 0;
+      const rTime = r.updatedAt || 0;
 
       const readPosts = [...new Set([...(l.readPosts || []), ...(r.readPosts || [])])];
-      const lPriority = STATUS_PRIORITY[l.status] ?? 0;
-      const rPriority = STATUS_PRIORITY[r.status] ?? 0;
-      const status = lPriority >= rPriority ? l.status : r.status;
-      const notes = (l.notes || '').length >= (r.notes || '').length ? (l.notes || '') : (r.notes || '');
+      
+      // Выбираем статус и заметки по таймстампу изменения
+      const status = lTime >= rTime ? l.status : r.status;
+      const notes = lTime >= rTime ? (l.notes || '') : (r.notes || '');
+      const updatedAt = Math.max(lTime, rTime);
 
-      result[title] = { status, notes, readPosts };
+      result[title] = { status, notes, readPosts, updatedAt };
     }
 
     return result;
@@ -219,6 +223,9 @@
         headers: { Authorization: this.authHeader }
       });
 
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Неверное имя пользователя или код доступа');
+      }
       if (response.status === 404) {
         return null;
       }
@@ -241,6 +248,9 @@
         body: arrayBuffer
       });
 
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Неверное имя пользователя или код доступа');
+      }
       if (!response.ok) {
         throw new Error(`Ошибка загрузки в облако (${response.status})`);
       }

@@ -925,6 +925,12 @@
   background-color: var(--lf-hover-bg);
 }
 
+.lf-btn-secondary.lf-provider-active {
+  border-color: var(--lf-primary);
+  color: var(--lf-primary);
+  background-color: rgba(255, 87, 34, 0.08);
+}
+
 .lf-btn-icon-label svg {
   width: 14px;
   height: 14px;

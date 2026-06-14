@@ -16,16 +16,43 @@ describe('WebDAV sync: слияние данных', () => {
       expect(merged['Тайтл А'].readPosts.sort()).toEqual(['post-1', 'post-2', 'post-3']);
     });
 
-    it('выбирает более продвинутый статус', () => {
+    it('выбирает статус и заметки на основе таймстампа updatedAt', () => {
       const local = {
-        'Тайтл Б': { status: 'watching', notes: '', readPosts: [] }
+        'Тайтл Б': { status: 'watching', notes: 'Новая короткая заметка', readPosts: [], updatedAt: 200 }
       };
       const remote = {
-        'Тайтл Б': { status: 'completed', notes: '', readPosts: [] }
+        'Тайтл Б': { status: 'completed', notes: 'Старая длинная заметка в облаке', readPosts: [], updatedAt: 100 }
+      };
+
+      const merged = sync.mergeUserData(local, remote);
+      expect(merged['Тайтл Б'].status).toBe('watching');
+      expect(merged['Тайтл Б'].notes).toBe('Новая короткая заметка');
+    });
+
+    it('выбирает статус и заметки из удаленного источника, если они новее', () => {
+      const local = {
+        'Тайтл Б': { status: 'watching', notes: 'Локальная заметка', readPosts: [], updatedAt: 100 }
+      };
+      const remote = {
+        'Тайтл Б': { status: 'completed', notes: 'Более свежая удаленная заметка', readPosts: [], updatedAt: 200 }
       };
 
       const merged = sync.mergeUserData(local, remote);
       expect(merged['Тайтл Б'].status).toBe('completed');
+      expect(merged['Тайтл Б'].notes).toBe('Более свежая удаленная заметка');
+    });
+
+    it('корректно обрабатывает отсутствие таймстампов (выбирает локальные по умолчанию)', () => {
+      const local = {
+        'Тайтл Б': { status: 'watching', notes: 'Локальная', readPosts: [] }
+      };
+      const remote = {
+        'Тайтл Б': { status: 'completed', notes: 'Удаленная', readPosts: [] }
+      };
+
+      const merged = sync.mergeUserData(local, remote);
+      expect(merged['Тайтл Б'].status).toBe('watching');
+      expect(merged['Тайтл Б'].notes).toBe('Локальная');
     });
   });
 

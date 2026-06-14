@@ -64,7 +64,7 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
     it('должен инициализировать дефолтные данные для нового тайтла', () => {
       const titleName = 'Крутой Тайтл';
       const data = content.ensureUserData(titleName);
-      expect(data).toEqual({ status: 'none', notes: '', readPosts: [] });
+      expect(data).toEqual({ status: 'none', notes: '', readPosts: [], updatedAt: 0 });
       expect(content.state.user_data[titleName]).toBeDefined();
     });
 
