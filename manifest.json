@@ -12,6 +12,9 @@
     "storage",
     "unlimitedStorage"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "host_permissions": [
     "https://*/*",
     "http://*/*"

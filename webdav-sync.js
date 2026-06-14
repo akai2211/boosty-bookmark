@@ -185,76 +185,182 @@
     }
 
     async checkConnection() {
-      const response = await fetch(this.baseUrl + '/', {
-        method: 'PROPFIND',
-        headers: {
-          Authorization: this.authHeader,
-          Depth: '0'
+      const isExtension = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
+      if (!isExtension) {
+        const response = await fetch(this.baseUrl + '/', {
+          method: 'PROPFIND',
+          headers: {
+            Authorization: this.authHeader,
+            Depth: '0'
+          }
+        });
+        if (response.status === 401 || response.status === 403) {
+          throw new Error('Неверное имя пользователя или код доступа');
         }
-      });
+        if (!response.ok && response.status !== 404) {
+          throw new Error(`Ошибка WebDAV: ${response.status}`);
+        }
+        return true;
+      }
 
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('Неверное имя пользователя или код доступа');
-      }
-      if (!response.ok && response.status !== 404) {
-        throw new Error(`Ошибка WebDAV: ${response.status}`);
-      }
-      return true;
+      return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          type: 'WEBDAV_REQUEST',
+          url: this.baseUrl + '/',
+          method: 'PROPFIND',
+          headers: {
+            Authorization: this.authHeader,
+            Depth: '0'
+          }
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            return reject(new Error(chrome.runtime.lastError.message));
+          }
+          if (!response || !response.success) {
+            return reject(new Error(response ? response.error : 'Нет ответа от фонового скрипта'));
+          }
+          if (response.status === 401 || response.status === 403) {
+            return reject(new Error('Неверное имя пользователя или код доступа'));
+          }
+          if (!response.ok && response.status !== 404) {
+            return reject(new Error(`Ошибка WebDAV: ${response.status}`));
+          }
+          resolve(true);
+        });
+      });
     }
 
     async ensureFolder() {
-      const response = await fetch(this.folderUrl, {
-        method: 'MKCOL',
-        headers: { Authorization: this.authHeader }
-      });
+      const isExtension = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
+      if (!isExtension) {
+        const response = await fetch(this.folderUrl, {
+          method: 'MKCOL',
+          headers: { Authorization: this.authHeader }
+        });
+        if (response.ok || response.status === 405 || response.status === 301 || response.status === 302 || response.status === 409) {
+          return true;
+        }
+        throw new Error(`Не удалось создать папку на WebDAV (${response.status})`);
+      }
 
-      if (response.ok || response.status === 405 || response.status === 301 || response.status === 302) {
-        return true;
-      }
-      if (response.status === 409) {
-        return true;
-      }
-      throw new Error(`Не удалось создать папку на WebDAV (${response.status})`);
+      return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          type: 'WEBDAV_REQUEST',
+          url: this.folderUrl,
+          method: 'MKCOL',
+          headers: { Authorization: this.authHeader }
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            return reject(new Error(chrome.runtime.lastError.message));
+          }
+          if (!response || !response.success) {
+            return reject(new Error(response ? response.error : 'Нет ответа от фонового скрипта'));
+          }
+          if (response.ok || response.status === 405 || response.status === 301 || response.status === 302 || response.status === 409) {
+            return resolve(true);
+          }
+          reject(new Error(`Не удалось создать папку на WebDAV (${response.status})`));
+        });
+      });
     }
 
     async download() {
-      const response = await fetch(this.fileUrl, {
-        method: 'GET',
-        headers: { Authorization: this.authHeader }
+      const isExtension = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
+      if (!isExtension) {
+        const response = await fetch(this.fileUrl, {
+          method: 'GET',
+          headers: { Authorization: this.authHeader }
+        });
+        if (response.status === 401 || response.status === 403) {
+          throw new Error('Неверное имя пользователя или код доступа');
+        }
+        if (response.status === 404) {
+          return null;
+        }
+        if (!response.ok) {
+          throw new Error(`Ошибка загрузки из облака (${response.status})`);
+        }
+        return response.arrayBuffer();
+      }
+
+      return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          type: 'WEBDAV_REQUEST',
+          url: this.fileUrl,
+          method: 'GET',
+          headers: { Authorization: this.authHeader }
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            return reject(new Error(chrome.runtime.lastError.message));
+          }
+          if (!response || !response.success) {
+            return reject(new Error(response ? response.error : 'Нет ответа от фонового скрипта'));
+          }
+          if (response.status === 401 || response.status === 403) {
+            return reject(new Error('Неверное имя пользователя или код доступа'));
+          }
+          if (response.status === 404) {
+            return resolve(null);
+          }
+          if (!response.ok) {
+            return reject(new Error(`Ошибка загрузки из облака (${response.status})`));
+          }
+          const buffer = new Uint8Array(response.bodyArray).buffer;
+          resolve(buffer);
+        });
       });
-
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('Неверное имя пользователя или код доступа');
-      }
-      if (response.status === 404) {
-        return null;
-      }
-      if (!response.ok) {
-        throw new Error(`Ошибка загрузки из облака (${response.status})`);
-      }
-
-      return response.arrayBuffer();
     }
 
     async upload(arrayBuffer) {
+      const isExtension = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
+      if (!isExtension) {
+        await this.ensureFolder();
+        const response = await fetch(this.fileUrl, {
+          method: 'PUT',
+          headers: {
+            Authorization: this.authHeader,
+            'Content-Type': 'application/zip'
+          },
+          body: arrayBuffer
+        });
+        if (response.status === 401 || response.status === 403) {
+          throw new Error('Неверное имя пользователя или код доступа');
+        }
+        if (!response.ok) {
+          throw new Error(`Ошибка загрузки в облако (${response.status})`);
+        }
+        return true;
+      }
+
       await this.ensureFolder();
+      const bodyArray = Array.from(new Uint8Array(arrayBuffer));
 
-      const response = await fetch(this.fileUrl, {
-        method: 'PUT',
-        headers: {
-          Authorization: this.authHeader,
-          'Content-Type': 'application/zip'
-        },
-        body: arrayBuffer
+      return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          type: 'WEBDAV_REQUEST',
+          url: this.fileUrl,
+          method: 'PUT',
+          headers: {
+            Authorization: this.authHeader,
+            'Content-Type': 'application/zip'
+          },
+          bodyArray: bodyArray
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            return reject(new Error(chrome.runtime.lastError.message));
+          }
+          if (!response || !response.success) {
+            return reject(new Error(response ? response.error : 'Нет ответа от фонового скрипта'));
+          }
+          if (response.status === 401 || response.status === 403) {
+            return reject(new Error('Неверное имя пользователя или код доступа'));
+          }
+          if (!response.ok) {
+            return reject(new Error(`Ошибка загрузки в облако (${response.status})`));
+          }
+          resolve(true);
+        });
       });
-
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('Неверное имя пользователя или код доступа');
-      }
-      if (!response.ok) {
-        throw new Error(`Ошибка загрузки в облако (${response.status})`);
-      }
-      return true;
     }
   }
 

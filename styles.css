@@ -1272,6 +1272,92 @@
   color: var(--lf-primary);
 }
 
+.lf-input-wrapper {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.lf-input-clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--lf-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.lf-input-clear-btn:hover {
+  color: var(--lf-text);
+  background-color: var(--lf-hover-bg);
+}
+
+.lf-settings-input-password {
+  -webkit-text-security: disc;
+  text-security: disc;
+}
+
+.lf-input-eye-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--lf-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.lf-input-eye-btn:hover {
+  color: var(--lf-text);
+  background-color: var(--lf-hover-bg);
+}
+
+.lf-sync-progress-bar-container {
+  width: 100%;
+  height: 4px;
+  background-color: var(--lf-hover-bg);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.lf-sync-progress-bar {
+  height: 100%;
+  background-color: var(--lf-primary);
+  width: 0%;
+  border-radius: 2px;
+  animation: lf-sync-run 2.5s ease-out forwards;
+}
+
+@keyframes lf-sync-run {
+  0% { width: 0%; }
+  30% { width: 45%; }
+  70% { width: 75%; }
+  90% { width: 90%; }
+  100% { width: 95%; }
+}
+
 
 
 
