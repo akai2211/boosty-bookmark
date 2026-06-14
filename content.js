@@ -5,6 +5,8 @@
 
   const BLOG_SLUG = 'lightfoxmanga';
   const STORAGE_KEY = `lf_state_${BLOG_SLUG}`;
+  const WEBDAV_CONFIG_KEY = 'lf_webdav_config';
+  const WEBDAV_AUTO_SYNC_MIN_INTERVAL_MS = 60 * 1000;
   
   // Черный список служебных тегов (будут отфильтрованы, чтобы оставить только названия произведений)
   const TAGS_BLACKLIST = [
@@ -122,8 +124,20 @@
       isSyncing: false,      // Флаг активного процесса загрузки всей базы
       syncProgress: 0,
       tabOrderExpanded: false, // По умолчанию свернут порядок вкладок
-      syncBackupExpanded: false // По умолчанию свернута секция синхронизации и бэкапа
+      syncBackupExpanded: false, // По умолчанию свернута секция синхронизации и бэкапа
+      webdavSyncing: false,
+      webdavTesting: false
     }
+  };
+
+  // Конфигурация WebDAV (хранится отдельно от прогресса каналов)
+  let webdavConfig = {
+    enabled: false,
+    baseUrl: '',
+    username: '',
+    accessCode: '',
+    lastSyncAt: 0,
+    lastSyncStatus: ''
   };
 
   // Инициализация/получение данных пользователя для тайтла (устраняет дублирование)
@@ -259,8 +273,11 @@
           render();
           backgroundSync();
         } else {
-          // Если базы вообще нет, показываем интерфейс и предлагаем запустить синхронизацию
           render();
+        }
+
+        if (state.settings.sidebarOpen) {
+          triggerAutoWebDavSync();
         }
       } else {
         // Если интерфейс уже есть, просто показываем его
@@ -389,6 +406,7 @@
   // Инициализация расширения
   async function init() {
     await loadStateFromStorage();
+    await loadWebDavConfig();
 
     // Восстанавливаем активный тайтл и вкладку из sessionStorage (для сохранения состояния текущей вкладки при перезагрузке)
     try {
@@ -774,6 +792,376 @@
     };
 
     reader.readAsArrayBuffer(file);
+  }
+
+  // -------------------------------------------------------------
+  // ОБЛАЧНАЯ СИНХРОНИЗАЦИЯ (WebDAV)
+  // -------------------------------------------------------------
+
+  function getWebDavSyncApi() {
+    if (typeof BoostyBookmarkSync !== 'undefined') {
+      return BoostyBookmarkSync;
+    }
+    if (typeof require !== 'undefined') {
+      return require('./webdav-sync.js');
+    }
+    return null;
+  }
+
+  function loadWebDavConfig() {
+    return new Promise((resolve) => {
+      if (!isExtensionContextValid()) { resolve(); return; }
+      try {
+        chrome.storage.local.get(WEBDAV_CONFIG_KEY, (result) => {
+          if (chrome.runtime.lastError) { resolve(); return; }
+          const saved = result[WEBDAV_CONFIG_KEY];
+          if (saved && typeof saved === 'object') {
+            webdavConfig = { ...webdavConfig, ...saved };
+            // Миграция со старых полей (Яндекс / appPassword)
+            if (saved.appPassword && !saved.accessCode) {
+              webdavConfig.accessCode = saved.appPassword;
+            }
+            delete webdavConfig.appPassword;
+            delete webdavConfig.provider;
+          }
+          resolve();
+        });
+      } catch (e) {
+        resolve();
+      }
+    });
+  }
+
+  function saveWebDavConfig() {
+    return new Promise((resolve) => {
+      if (!isExtensionContextValid()) { resolve(); return; }
+      try {
+        const update = {};
+        update[WEBDAV_CONFIG_KEY] = webdavConfig;
+        chrome.storage.local.set(update, () => {
+          if (chrome.runtime.lastError) { resolve(); return; }
+          resolve();
+        });
+      } catch (e) {
+        resolve();
+      }
+    });
+  }
+
+  function formatSyncDate(timestamp) {
+    if (!timestamp) return 'никогда';
+    const date = new Date(timestamp);
+    return date.toLocaleString('ru-RU', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function buildLocalChannelsMapFromStorage(storageResult) {
+    const channelsMap = {};
+
+    for (const [key, value] of Object.entries(storageResult || {})) {
+      if (!key.startsWith('lf_state_')) continue;
+      const slug = key.replace('lf_state_', '');
+
+      if (slug === BLOG_SLUG) {
+        channelsMap[slug] = {
+          posts: state.posts,
+          settings: state.settings,
+          user_data: state.user_data,
+          playerTimestamps: state.playerTimestamps,
+          lastVisit: state.lastVisit,
+          collapsedGroups: state.collapsedGroups,
+          blogDescriptionLinks: state.blogDescriptionLinks
+        };
+      } else if (value && typeof value === 'object') {
+        channelsMap[slug] = value;
+      }
+    }
+
+    if (!channelsMap[BLOG_SLUG]) {
+      channelsMap[BLOG_SLUG] = {
+        posts: state.posts,
+        settings: state.settings,
+        user_data: state.user_data,
+        playerTimestamps: state.playerTimestamps,
+        lastVisit: state.lastVisit,
+        collapsedGroups: state.collapsedGroups,
+        blogDescriptionLinks: state.blogDescriptionLinks
+      };
+    }
+
+    return channelsMap;
+  }
+
+  async function parseBackupZip(arrayBuffer) {
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const channelsMap = {};
+
+    for (const [relativePath, fileEntry] of Object.entries(zip.files)) {
+      if (fileEntry.dir) continue;
+
+      const pathParts = relativePath.split('/');
+      if (pathParts.length !== 2 || pathParts[1] !== 'progress.json') continue;
+
+      const slug = pathParts[0];
+      const importedData = JSON.parse(await fileEntry.async('text'));
+
+      if (importedData && typeof importedData === 'object' && importedData.user_data) {
+        channelsMap[slug] = {
+          posts: importedData.posts || [],
+          user_data: importedData.user_data,
+          lastVisit: importedData.lastVisit || 0,
+          collapsedGroups: importedData.collapsedGroups || {},
+          blogDescriptionLinks: importedData.blogDescriptionLinks || [],
+          playerTimestamps: importedData.playerTimestamps || {},
+          settings: importedData.settings || {},
+          version: importedData.version,
+          exportDate: importedData.exportDate
+        };
+      }
+    }
+
+    if (Object.keys(channelsMap).length === 0) {
+      throw new Error('В архиве не найдено корректных файлов progress.json');
+    }
+
+    return channelsMap;
+  }
+
+  async function buildBackupZipBuffer(channelsMap) {
+    const zip = new JSZip();
+
+    for (const [slug, channelData] of Object.entries(channelsMap)) {
+      const dataToExport = {
+        version: '2.0',
+        exportDate: channelData.exportDate || new Date().toISOString(),
+        posts: channelData.posts || [],
+        user_data: channelData.user_data || {},
+        lastVisit: channelData.lastVisit || 0,
+        collapsedGroups: channelData.collapsedGroups || {},
+        blogDescriptionLinks: channelData.blogDescriptionLinks || [],
+        playerTimestamps: channelData.playerTimestamps || {},
+        settings: channelData.settings || {}
+      };
+
+      zip.file(`${slug}/progress.json`, JSON.stringify(dataToExport, null, 2));
+    }
+
+    return zip.generateAsync({ type: 'arraybuffer' });
+  }
+
+  function applyMergedChannelToState(slug, channelData) {
+    const mergedChannel = {
+      posts: channelData.posts || [],
+      settings: channelData.settings || {},
+      user_data: channelData.user_data || {},
+      playerTimestamps: channelData.playerTimestamps || {},
+      lastVisit: channelData.lastVisit || 0,
+      collapsedGroups: channelData.collapsedGroups || {},
+      blogDescriptionLinks: channelData.blogDescriptionLinks || []
+    };
+
+    if (slug === BLOG_SLUG) {
+      state.posts = mergedChannel.posts;
+      state.settings = { ...state.settings, ...mergedChannel.settings };
+      state.user_data = mergedChannel.user_data;
+      state.playerTimestamps = mergedChannel.playerTimestamps;
+      state.lastVisit = mergedChannel.lastVisit;
+      state.collapsedGroups = mergedChannel.collapsedGroups;
+      state.blogDescriptionLinks = mergedChannel.blogDescriptionLinks;
+    }
+
+    return mergedChannel;
+  }
+
+  async function applyMergedChannelsToStorage(channelsMap) {
+    const storageUpdates = {};
+
+    for (const [slug, channelData] of Object.entries(channelsMap)) {
+      storageUpdates[`lf_state_${slug}`] = applyMergedChannelToState(slug, channelData);
+    }
+
+    await new Promise((resolve, reject) => {
+      chrome.storage.local.set(storageUpdates, () => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  async function collectLocalChannelsMap() {
+    const storageResult = await new Promise((resolve) => {
+      chrome.storage.local.get(null, (result) => {
+        resolve(result || {});
+      });
+    });
+
+    return buildLocalChannelsMapFromStorage(storageResult);
+  }
+
+  function normalizeWebDavBaseUrl(rawUrl) {
+    const trimmed = String(rawUrl || '').trim();
+    if (!trimmed) {
+      throw new Error('Укажите адрес WebDAV-сервера');
+    }
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const parsed = new URL(withProtocol);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Адрес сервера должен начинаться с http:// или https://');
+    }
+    return parsed.href.replace(/\/+$/, '');
+  }
+
+  function createWebDavProvider() {
+    const syncApi = getWebDavSyncApi();
+    if (!syncApi) {
+      throw new Error('Модуль синхронизации не загружен');
+    }
+    if (!webdavConfig.baseUrl?.trim()) {
+      throw new Error('Укажите адрес WebDAV-сервера');
+    }
+    if (!webdavConfig.username?.trim()) {
+      throw new Error('Укажите имя пользователя');
+    }
+    if (!webdavConfig.accessCode) {
+      throw new Error('Укажите код доступа');
+    }
+    return new syncApi.WebDavProvider({
+      baseUrl: normalizeWebDavBaseUrl(webdavConfig.baseUrl),
+      username: webdavConfig.username.trim(),
+      accessCode: webdavConfig.accessCode
+    });
+  }
+
+  async function prepareWebDavConnection() {
+    await saveWebDavSettingsFromForm();
+    return createWebDavProvider();
+  }
+
+  async function testWebDavConnection() {
+    if (state.ui.webdavTesting || state.ui.webdavSyncing) return;
+
+    state.ui.webdavTesting = true;
+    renderSettingsContent();
+
+    try {
+      const provider = await prepareWebDavConnection();
+      await provider.checkConnection();
+      webdavConfig.lastSyncStatus = 'Подключение успешно';
+      await saveWebDavConfig();
+      showNotification('Подключение к WebDAV успешно!');
+    } catch (err) {
+      console.error('WebDAV test error:', err);
+      webdavConfig.lastSyncStatus = err.message || 'Ошибка подключения';
+      await saveWebDavConfig();
+      showNotification(webdavConfig.lastSyncStatus);
+    } finally {
+      state.ui.webdavTesting = false;
+      renderSettingsContent();
+    }
+  }
+
+  function isWebDavConfigured() {
+    return !!(
+      webdavConfig.enabled &&
+      webdavConfig.baseUrl?.trim() &&
+      webdavConfig.username?.trim() &&
+      webdavConfig.accessCode
+    );
+  }
+
+  function triggerAutoWebDavSync() {
+    if (!isWebDavConfigured()) return;
+    if (state.ui.webdavSyncing || state.ui.webdavTesting) return;
+
+    const now = Date.now();
+    if (webdavConfig.lastSyncAt && (now - webdavConfig.lastSyncAt) < WEBDAV_AUTO_SYNC_MIN_INTERVAL_MS) {
+      return;
+    }
+
+    performWebDavSync({ silent: true });
+  }
+
+  async function performWebDavSync(options = {}) {
+    const silent = options.silent === true;
+
+    if (state.ui.webdavSyncing || state.ui.webdavTesting) return;
+
+    if (!webdavConfig.enabled) {
+      if (!silent) showNotification('Включите синхронизацию WebDAV в настройках');
+      return;
+    }
+
+    if (!isWebDavConfigured()) {
+      if (!silent) showNotification('Заполните адрес сервера, имя пользователя и код доступа');
+      return;
+    }
+
+    state.ui.webdavSyncing = true;
+    if (state.ui.activeTab === 'settings') {
+      renderSettingsContent();
+    }
+
+    try {
+      const syncApi = getWebDavSyncApi();
+      const provider = await prepareWebDavConnection();
+
+      const localChannels = await collectLocalChannelsMap();
+      const remoteBuffer = await provider.download();
+
+      let remoteChannels = {};
+      if (remoteBuffer) {
+        remoteChannels = await parseBackupZip(remoteBuffer);
+      }
+
+      const mergedChannels = syncApi.mergeChannelsMaps(localChannels, remoteChannels);
+
+      await applyMergedChannelsToStorage(mergedChannels);
+      const zipBuffer = await buildBackupZipBuffer(mergedChannels);
+      await provider.upload(zipBuffer);
+
+      webdavConfig.lastSyncAt = Date.now();
+      webdavConfig.lastSyncStatus = silent ? 'Автосинхронизация выполнена' : 'Синхронизация выполнена';
+      await saveWebDavConfig();
+
+      if (!silent) {
+        showNotification('Облачная синхронизация завершена!');
+      }
+      render();
+    } catch (err) {
+      console.error('WebDAV sync error:', err);
+      webdavConfig.lastSyncStatus = err.message || 'Ошибка синхронизации';
+      await saveWebDavConfig();
+      if (!silent) {
+        showNotification(webdavConfig.lastSyncStatus);
+      }
+      if (state.ui.activeTab === 'settings') {
+        renderSettingsContent();
+      }
+    } finally {
+      state.ui.webdavSyncing = false;
+    }
+  }
+
+  async function saveWebDavSettingsFromForm() {
+    const baseUrlInput = document.getElementById('lf-webdav-base-url');
+    const usernameInput = document.getElementById('lf-webdav-username');
+    const accessCodeInput = document.getElementById('lf-webdav-access-code');
+    const enabledInput = document.getElementById('lf-webdav-enabled');
+
+    if (baseUrlInput) webdavConfig.baseUrl = baseUrlInput.value.trim();
+    if (usernameInput) webdavConfig.username = usernameInput.value.trim();
+    if (accessCodeInput && accessCodeInput.value) webdavConfig.accessCode = accessCodeInput.value;
+    if (enabledInput) webdavConfig.enabled = enabledInput.checked;
+
+    await saveWebDavConfig();
   }
 
   // Изменение порядка вкладок
@@ -1529,8 +1917,8 @@
       if (sidebar) {
         if (state.settings.sidebarOpen) {
           sidebar.classList.add('lf-open');
-          // Автоматически определяем текущую тему Boosty при открытии
           detectAndApplyTheme();
+          triggerAutoWebDavSync();
         } else {
           sidebar.classList.remove('lf-open');
         }
@@ -1973,6 +2361,59 @@
                 Полная принудительная синхронизация
               </button>
             </div>
+
+            <div class="lf-settings-divider"></div>
+
+            <h4 class="lf-settings-subtitle">Облачная синхронизация (WebDAV)</h4>
+            <div class="lf-settings-desc" style="margin-bottom: 10px;">
+              Синхронизация через ваш WebDAV-сервер (Nextcloud, Owncloud, NAS и др.) в том же ZIP-формате, что и ручной экспорт.
+              При каждом открытии панели выполняется автосинхронизация (не чаще одного раза в минуту).
+            </div>
+
+            <details class="lf-webdav-guide">
+              <summary>Как подключить Nextcloud или другой WebDAV</summary>
+              <ol class="lf-webdav-guide-list">
+                <li>На сервере создайте <strong>код доступа для приложения</strong> — это не пароль от вашего аккаунта. В Nextcloud: «Настройки → Безопасность → Устройства и сессии → Создать новый код доступа приложения».</li>
+                <li>Скопируйте <strong>адрес WebDAV</strong> из настроек файлов. Для Nextcloud он выглядит так: <code>https://ваш-сервер/remote.php/dav/files/имя/</code></li>
+                <li>Вставьте адрес, имя пользователя и сгенерированный код ниже. Код показывается один раз — сохраните его.</li>
+                <li>Нажмите «Проверить подключение» и убедитесь, что статус успешный.</li>
+              </ol>
+            </details>
+
+            <div class="lf-settings-row">
+              <label class="lf-settings-label" for="lf-webdav-enabled">
+                Включить синхронизацию через WebDAV
+              </label>
+              <input type="checkbox" id="lf-webdav-enabled" class="lf-settings-checkbox" ${webdavConfig.enabled ? 'checked' : ''}>
+            </div>
+
+            <div class="lf-webdav-fields">
+              <label class="lf-settings-label" for="lf-webdav-base-url">Адрес WebDAV-сервера</label>
+              <input type="url" id="lf-webdav-base-url" class="lf-settings-input" value="${escapeHtml(webdavConfig.baseUrl)}" placeholder="https://cloud.example.com/remote.php/dav/files/user/" autocomplete="off">
+
+              <label class="lf-settings-label" for="lf-webdav-username" style="margin-top: 8px;">Имя пользователя</label>
+              <input type="text" id="lf-webdav-username" class="lf-settings-input" value="${escapeHtml(webdavConfig.username)}" placeholder="user" autocomplete="username">
+
+              <label class="lf-settings-label" for="lf-webdav-access-code" style="margin-top: 8px;">
+                Код доступа
+                <div class="lf-settings-desc">Сгенерированный на сервере код приложения, не пароль от аккаунта.</div>
+              </label>
+              <input type="password" id="lf-webdav-access-code" class="lf-settings-input" value="" placeholder="${webdavConfig.accessCode ? '•••••••• (сохранён)' : 'Вставьте код доступа'}" autocomplete="new-password">
+            </div>
+
+            <div class="lf-settings-buttons" style="margin-top: 12px;">
+              <button id="lf-webdav-test-btn" class="lf-btn-secondary" ${state.ui.webdavTesting || state.ui.webdavSyncing ? 'disabled' : ''}>
+                ${state.ui.webdavTesting ? 'Проверка...' : 'Проверить подключение'}
+              </button>
+              <button id="lf-webdav-sync-btn" class="lf-btn-primary" ${state.ui.webdavSyncing || state.ui.webdavTesting ? 'disabled' : ''}>
+                ${state.ui.webdavSyncing ? 'Синхронизация...' : 'Синхронизировать сейчас'}
+              </button>
+            </div>
+
+            <div class="lf-webdav-status">
+              <span>Последняя синхронизация: ${formatSyncDate(webdavConfig.lastSyncAt)}</span>
+              ${webdavConfig.lastSyncStatus ? `<span class="lf-webdav-status-note">${escapeHtml(webdavConfig.lastSyncStatus)}</span>` : ''}
+            </div>
           </div>
         </div>
 
@@ -2107,6 +2548,45 @@
     const importInput = document.getElementById('lf-import-input');
     importBtn.addEventListener('click', () => importInput.click());
     importInput.addEventListener('change', importUserData);
+
+    const webdavEnabled = document.getElementById('lf-webdav-enabled');
+    const webdavBaseUrl = document.getElementById('lf-webdav-base-url');
+    const webdavUsername = document.getElementById('lf-webdav-username');
+    const webdavAccessCode = document.getElementById('lf-webdav-access-code');
+    const webdavTestBtn = document.getElementById('lf-webdav-test-btn');
+    const webdavSyncBtn = document.getElementById('lf-webdav-sync-btn');
+
+    if (webdavEnabled) {
+      webdavEnabled.addEventListener('change', async (e) => {
+        webdavConfig.enabled = e.target.checked;
+        await saveWebDavConfig();
+        showNotification(e.target.checked ? 'Синхронизация WebDAV включена' : 'Синхронизация WebDAV отключена');
+      });
+    }
+
+    if (webdavBaseUrl) {
+      webdavBaseUrl.addEventListener('blur', saveWebDavSettingsFromForm);
+    }
+
+    if (webdavUsername) {
+      webdavUsername.addEventListener('blur', saveWebDavSettingsFromForm);
+    }
+
+    if (webdavAccessCode) {
+      webdavAccessCode.addEventListener('blur', saveWebDavSettingsFromForm);
+    }
+
+    if (webdavTestBtn) {
+      webdavTestBtn.addEventListener('click', () => {
+        testWebDavConnection();
+      });
+    }
+
+    if (webdavSyncBtn) {
+      webdavSyncBtn.addEventListener('click', () => {
+        performWebDavSync({ silent: false });
+      });
+    }
 
     // Кнопка удаления данных (двухэтапное подтверждение)
     const deleteDataBtn = document.getElementById('lf-delete-data-btn');

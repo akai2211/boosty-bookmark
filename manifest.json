@@ -12,6 +12,10 @@
     "storage",
     "unlimitedStorage"
   ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
   "content_scripts": [
     {
       "matches": [
@@ -19,6 +23,7 @@
       ],
       "js": [
         "jszip.min.js",
+        "webdav-sync.js",
         "content.js"
       ],
       "css": [
