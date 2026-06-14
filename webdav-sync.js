@@ -167,7 +167,7 @@
   class WebDavProvider {
     constructor(config) {
       if (!config.baseUrl) {
-        throw new Error('Не указан адрес WebDAV-сервера');
+        throw new Error(t('error_webdav_no_url'));
       }
       this.baseUrl = config.baseUrl.replace(/\/+$/, '');
       this.username = config.username || '';
@@ -195,10 +195,10 @@
           }
         });
         if (response.status === 401 || response.status === 403) {
-          throw new Error('Неверное имя пользователя или код доступа');
+          throw new Error(t('error_webdav_auth'));
         }
         if (!response.ok && response.status !== 404) {
-          throw new Error(`Ошибка WebDAV: ${response.status}`);
+          throw new Error(t('error_webdav_propfind', response.status));
         }
         return true;
       }
@@ -217,13 +217,13 @@
             return reject(new Error(chrome.runtime.lastError.message));
           }
           if (!response || !response.success) {
-            return reject(new Error(response ? response.error : 'Нет ответа от фонового скрипта'));
+            return reject(new Error(response ? response.error : t('error_webdav_no_background_response')));
           }
           if (response.status === 401 || response.status === 403) {
-            return reject(new Error('Неверное имя пользователя или код доступа'));
+            return reject(new Error(t('error_webdav_auth')));
           }
           if (!response.ok && response.status !== 404) {
-            return reject(new Error(`Ошибка WebDAV: ${response.status}`));
+            return reject(new Error(t('error_webdav_propfind', response.status)));
           }
           resolve(true);
         });
@@ -240,7 +240,7 @@
         if (response.ok || response.status === 405 || response.status === 301 || response.status === 302 || response.status === 409) {
           return true;
         }
-        throw new Error(`Не удалось создать папку на WebDAV (${response.status})`);
+        throw new Error(t('error_webdav_mkcol', response.status));
       }
 
       return new Promise((resolve, reject) => {
@@ -254,12 +254,12 @@
             return reject(new Error(chrome.runtime.lastError.message));
           }
           if (!response || !response.success) {
-            return reject(new Error(response ? response.error : 'Нет ответа от фонового скрипта'));
+            return reject(new Error(response ? response.error : t('error_webdav_no_background_response')));
           }
           if (response.ok || response.status === 405 || response.status === 301 || response.status === 302 || response.status === 409) {
             return resolve(true);
           }
-          reject(new Error(`Не удалось создать папку на WebDAV (${response.status})`));
+          reject(new Error(t('error_webdav_mkcol', response.status)));
         });
       });
     }
@@ -272,13 +272,13 @@
           headers: { Authorization: this.authHeader }
         });
         if (response.status === 401 || response.status === 403) {
-          throw new Error('Неверное имя пользователя или код доступа');
+          throw new Error(t('error_webdav_auth'));
         }
         if (response.status === 404) {
           return null;
         }
         if (!response.ok) {
-          throw new Error(`Ошибка загрузки из облака (${response.status})`);
+          throw new Error(t('error_webdav_download', response.status));
         }
         return response.arrayBuffer();
       }
@@ -294,16 +294,16 @@
             return reject(new Error(chrome.runtime.lastError.message));
           }
           if (!response || !response.success) {
-            return reject(new Error(response ? response.error : 'Нет ответа от фонового скрипта'));
+            return reject(new Error(response ? response.error : t('error_webdav_no_background_response')));
           }
           if (response.status === 401 || response.status === 403) {
-            return reject(new Error('Неверное имя пользователя или код доступа'));
+            return reject(new Error(t('error_webdav_auth')));
           }
           if (response.status === 404) {
             return resolve(null);
           }
           if (!response.ok) {
-            return reject(new Error(`Ошибка загрузки из облака (${response.status})`));
+            return reject(new Error(t('error_webdav_download', response.status)));
           }
           const buffer = new Uint8Array(response.bodyArray).buffer;
           resolve(buffer);
@@ -324,10 +324,10 @@
           body: arrayBuffer
         });
         if (response.status === 401 || response.status === 403) {
-          throw new Error('Неверное имя пользователя или код доступа');
+          throw new Error(t('error_webdav_auth'));
         }
         if (!response.ok) {
-          throw new Error(`Ошибка загрузки в облако (${response.status})`);
+          throw new Error(t('error_webdav_upload', response.status));
         }
         return true;
       }
@@ -350,13 +350,13 @@
             return reject(new Error(chrome.runtime.lastError.message));
           }
           if (!response || !response.success) {
-            return reject(new Error(response ? response.error : 'Нет ответа от фонового скрипта'));
+            return reject(new Error(response ? response.error : t('error_webdav_no_background_response')));
           }
           if (response.status === 401 || response.status === 403) {
-            return reject(new Error('Неверное имя пользователя или код доступа'));
+            return reject(new Error(t('error_webdav_auth')));
           }
           if (!response.ok) {
-            return reject(new Error(`Ошибка загрузки в облако (${response.status})`));
+            return reject(new Error(t('error_webdav_upload', response.status)));
           }
           resolve(true);
         });

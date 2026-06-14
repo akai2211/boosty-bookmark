@@ -26,7 +26,8 @@ const sessionStorageMock = (() => {
 })();
 global.sessionStorage = sessionStorageMock;
 
-// Импортируем тестируемый модуль
+// Импортируем локализацию и тестируемый модуль
+require('../locales.js');
 const content = require('../content.js');
 
 describe('Юнит-тесты расширения Boosty Bookmark', () => {

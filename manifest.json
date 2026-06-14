@@ -27,6 +27,7 @@
       "js": [
         "jszip.min.js",
         "webdav-sync.js",
+        "locales.js",
         "content.js"
       ],
       "css": [

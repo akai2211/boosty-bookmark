@@ -17,12 +17,12 @@
 
   // Маппинг ключей вкладок и их человекочитаемых названий
   const TAB_NAMES = {
-    watching: 'Смотрю',
-    favorite: 'Избранное',
-    new: 'Новые',
-    all: 'Все',
-    completed: 'Завершено',
-    dropped: 'Брошено'
+    watching: t('tab_watching'),
+    favorite: t('tab_favorite'),
+    new: t('tab_new'),
+    all: t('tab_all'),
+    completed: t('tab_completed'),
+    dropped: t('tab_dropped')
   };
 
   // SVG-путь иконки закладки с вырезом молнии (из предоставленного icon_bookmark.svg)
@@ -642,7 +642,7 @@
       chrome.storage.local.get(null, (result) => {
         if (chrome.runtime.lastError) {
           console.error(chrome.runtime.lastError);
-          showNotification('Не удалось прочитать данные для бэкапа.');
+          showNotification(t('notify_backup_read_error'));
           return;
         }
 
@@ -713,16 +713,16 @@
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
 
-            showNotification('Прогресс экспортирован успешно в ZIP!');
+            showNotification(t('notify_export_success'));
           })
           .catch((err) => {
             console.error('Ошибка при генерации ZIP:', err);
-            showNotification('Не удалось сгенерировать ZIP-архив.');
+            showNotification(t('notify_zip_generate_error'));
           });
       });
     } catch (e) {
       console.error('Ошибка при экспорте прогресса:', e);
-      showNotification('Не удалось экспортировать прогресс.');
+      showNotification(t('notify_export_error'));
     }
   }
 
@@ -796,11 +796,11 @@
           state.settings = { ...state.settings, ...storageUpdates[currentChannelKey].settings };
         }
 
-        showNotification(`Прогресс успешно импортирован! Загружено каналов: ${importedChannelsCount}`);
+        showNotification(t('notify_import_success', importedChannelsCount));
         render();
       } catch (err) {
         console.error('Ошибка при импорте бэкапа:', err);
-        showNotification('Неверный формат файла. Убедитесь, что выбрали правильный ZIP-архив.');
+        showNotification(t('notify_import_invalid_format'));
       } finally {
         event.target.value = '';
       }
@@ -874,9 +874,10 @@
   }
 
   function formatSyncDate(timestamp) {
-    if (!timestamp) return 'никогда';
+    if (!timestamp) return t('settings_webdav_never_sync');
     const date = new Date(timestamp);
-    return date.toLocaleString('ru-RU', {
+    const dateLocale = (document.documentElement.lang || '').startsWith('en') ? 'en-US' : 'ru-RU';
+    return date.toLocaleString(dateLocale, {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -1034,12 +1035,12 @@
   function normalizeWebDavBaseUrl(rawUrl) {
     const trimmed = String(rawUrl || '').trim();
     if (!trimmed) {
-      throw new Error('Укажите адрес WebDAV-сервера');
+      throw new Error(t('error_webdav_no_url'));
     }
     const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
     const parsed = new URL(withProtocol);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new Error('Адрес сервера должен начинаться с http:// или https://');
+      throw new Error(t('error_webdav_invalid_protocol'));
     }
     return parsed.href.replace(/\/+$/, '');
   }
@@ -1047,19 +1048,19 @@
   function createWebDavProvider() {
     const syncApi = getWebDavSyncApi();
     if (!syncApi) {
-      throw new Error('Модуль синхронизации не загружен');
+      throw new Error(t('error_webdav_module_not_loaded'));
     }
     const isYandex = webdavConfig.provider === 'yandex';
     const baseUrl = isYandex ? 'https://webdav.yandex.ru' : webdavConfig.baseUrl;
 
     if (!baseUrl?.trim()) {
-      throw new Error('Укажите адрес WebDAV-сервера');
+      throw new Error(t('error_webdav_no_url'));
     }
     if (!webdavConfig.username?.trim()) {
-      throw new Error('Укажите имя пользователя');
+      throw new Error(t('error_webdav_no_username'));
     }
     if (!webdavConfig.accessCode) {
-      throw new Error('Укажите код доступа');
+      throw new Error(t('error_webdav_no_access_code'));
     }
     const cleanedUsername = isYandex
       ? webdavConfig.username.trim().replace(/@(yandex\.(ru|by|kz|ua|com)|ya\.ru)$/i, '')
@@ -1119,7 +1120,7 @@
     if (silent && !isWebDavConfigured()) return;
 
     if (!silent && !isWebDavFieldsFilled()) {
-      showNotification('Заполните адрес сервера, имя пользователя и код доступа');
+      showNotification(t('notify_webdav_fill_fields'));
       return;
     }
 
@@ -1147,7 +1148,7 @@
       await provider.upload(zipBuffer);
 
       webdavConfig.lastSyncAt = Date.now();
-      webdavConfig.lastSyncStatus = silent ? 'Автосинхронизация выполнена' : 'Синхронизация выполнена';
+      webdavConfig.lastSyncStatus = silent ? t('status_webdav_auto_sync_success') : t('status_webdav_sync_success');
 
       if (!silent && !webdavConfig.enabled) {
         webdavConfig.enabled = true;
@@ -1155,11 +1156,11 @@
       await saveWebDavConfig();
 
       if (!silent) {
-        showNotification('Облачная синхронизация завершена!');
+        showNotification(t('notify_webdav_sync_success'));
       }
     } catch (err) {
       console.error('WebDAV sync error:', err);
-      webdavConfig.lastSyncStatus = err.message || 'Ошибка синхронизации';
+      webdavConfig.lastSyncStatus = err.message || t('status_webdav_sync_error');
       await saveWebDavConfig();
       if (!silent) {
         showNotification(webdavConfig.lastSyncStatus);
@@ -1539,11 +1540,11 @@
       // Сбрасываем свернутые группы, чтобы отразить новые/обновленные посты
       state.collapsedGroups = {};
       
-      showNotification('Синхронизация завершена успешно!');
+      showNotification(t('notify_sync_success'));
       
     } catch (e) {
       console.error('Ошибка инкрементальной синхронизации Boosty:', e);
-      showNotification('Ошибка при синхронизации постов. Попробуйте еще раз.');
+      showNotification(t('notify_sync_error'));
     } finally {
       state.ui.isSyncing = false;
       render();
@@ -1617,11 +1618,11 @@
       await saveStateToStorage();
       
       // Оповещение об успешной синхронизации
-      showNotification('Синхронизация завершена успешно!');
+      showNotification(t('notify_sync_success'));
       
     } catch (e) {
       console.error('Ошибка синхронизации Boosty:', e);
-      showNotification('Ошибка при загрузке постов. Попробуйте еще раз.');
+      showNotification(t('notify_sync_posts_error'));
     } finally {
       state.ui.isSyncing = false;
       render();
@@ -1939,7 +1940,7 @@
     
     const btn = document.createElement('button');
     btn.id = 'lf-trigger-btn';
-    btn.title = 'Закладки';
+    btn.title = t('title_bookmarks');
     
     // Иконка закладки с молнией (без внешнего оранжевого квадрата, только сама закладка)
     btn.innerHTML = `<svg viewBox="550 450 850 1020"><path fill="#ffffff" d="${BOOKMARK_SVG_PATH}" /></svg>`;
@@ -2096,11 +2097,11 @@
       sidebar.innerHTML = `
         <div class="lf-loading-overlay">
           <div class="lf-spinner"></div>
-          <div class="lf-loading-text">Загрузка базы постов...<br>Страница ${Math.round(state.ui.syncProgress / 7)}</div>
+          <div class="lf-loading-text">${t('loading_db')}<br>${t('loading_page', Math.round(state.ui.syncProgress / 7))}</div>
           <div class="lf-loading-progress">
             <div class="lf-loading-progress-bar" style="width: ${state.ui.syncProgress}%"></div>
           </div>
-          <div style="font-size: 11px; color: var(--lf-text-muted);">Это нужно сделать только один раз.</div>
+          <div style="font-size: 11px; color: var(--lf-text-muted);">${t('loading_once_notice')}</div>
         </div>
       `;
       return;
@@ -2134,26 +2135,26 @@
           </div>
           <div class="lf-header-buttons">
             <!-- Кнопка настроек -->
-            <button id="lf-settings-btn" class="lf-btn-icon ${state.ui.activeTab === 'settings' ? 'lf-active' : ''}" title="Настройки">
+            <button id="lf-settings-btn" class="lf-btn-icon ${state.ui.activeTab === 'settings' ? 'lf-active' : ''}" title="${t('settings_btn_tooltip')}">
               <svg viewBox="0 0 24 24">
                 <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.47,5.34 14.86,5.08L14.47,2.42C14.43,2.18 14.22,2 13.97,2H9.97C9.72,2 9.51,2.18 9.47,2.42L9.08,5.08C8.47,5.34 7.9,5.66 7.38,6.05L4.89,5.05C4.67,4.96 4.4,5.05 4.28,5.27L2.28,8.73C2.16,8.95 2.21,9.22 2.4,9.37L4.51,11C4.47,11.34 4.45,11.67 4.45,12C4.45,12.33 4.47,12.65 4.51,12.97L2.4,14.63C2.21,14.78 2.16,15.05 2.28,15.27L4.28,18.73C4.4,18.95 4.67,19.04 4.89,18.95L7.38,17.95C7.9,18.34 8.47,18.66 9.08,18.92L9.47,21.58C9.51,21.82 9.72,22 9.97,22H13.97C14.22,22 14.43,21.82 14.47,21.58L14.86,18.92C15.47,18.66 16.04,18.34 16.56,17.95L19.05,18.95C19.27,19.04 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
               </svg>
             </button>
             <!-- Кнопка синхронизации -->
-            <button id="lf-sync-btn" class="lf-btn-icon" title="Синхронизировать новые посты">
+            <button id="lf-sync-btn" class="lf-btn-icon" title="${t('sync_btn_tooltip')}">
               <svg viewBox="0 0 24 24">
                 <path d="M19,8L15,12H18A6,6 0 0,1 12,18C11,18 10.1,17.65 9.35,17L7.9,18.45C9,19.45 10.45,20 12,20A8,8 0 0,0 20,12H23L19,8M6,12A6,6 0 0,1 12,6C13,6 13.9,6.35 14.65,7L16.1,5.55C15,4.55 13.55,4 12,4A8,8 0 0,0 4,12H1L5,16L9,12H6Z" />
               </svg>
             </button>
             <!-- Кнопка закрытия -->
-            <button id="lf-close-btn" class="lf-btn-icon" title="Свернуть панель">
+            <button id="lf-close-btn" class="lf-btn-icon" title="${t('close_btn_tooltip')}">
               <svg viewBox="0 0 24 24">
                 <path d="M8.59,16.59L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.59Z" />
               </svg>
             </button>
           </div>
         </div>
-        <div class="lf-stats">Тайтлов: ${uniqueTagCount} | Постов: ${state.posts.length}</div>
+        <div class="lf-stats">${t('header_titles')}${uniqueTagCount}${t('header_posts')}${state.posts.length}</div>
         
         <!-- Строка поиска (отображается только в списке и не на вкладке настроек) -->
         ${(!state.ui.activeTitle && state.ui.activeTab !== 'settings') ? `
@@ -2162,8 +2163,8 @@
               <svg class="lf-search-icon" viewBox="0 0 24 24">
                 <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
               </svg>
-              <input type="text" id="lf-search" class="lf-search-input" placeholder="Поиск тайтла..." value="${escapeHtml(state.ui.searchQuery)}">
-              <button id="lf-search-clear" class="lf-search-clear-btn" style="${state.ui.searchQuery ? 'display: flex;' : 'display: none;'}" title="Очистить поиск">
+              <input type="text" id="lf-search" class="lf-search-input" placeholder="${t('search_placeholder')}" value="${escapeHtml(state.ui.searchQuery)}">
+              <button id="lf-search-clear" class="lf-search-clear-btn" style="${state.ui.searchQuery ? 'display: flex;' : 'display: none;'}" title="${t('search_clear_tooltip')}">
                 <svg viewBox="0 0 24 24">
                   <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
                 </svg>
@@ -2172,20 +2173,20 @@
             
             <!-- Сортировка тайтлов -->
             <div class="lf-dropdown" id="lf-sort-dropdown-container">
-              <button id="lf-sort-btn" class="lf-btn-icon" title="Сортировка тайтлов">
+              <button id="lf-sort-btn" class="lf-btn-icon" title="${t('sort_btn_tooltip')}">
                 <svg viewBox="0 0 24 24">
                   <path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" />
                 </svg>
               </button>
               <div class="lf-dropdown-content" id="lf-sort-dropdown" style="right: 0; min-width: 190px;">
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'name_asc' ? 'lf-active' : ''}" data-sort="name_asc">По названию: А → Я</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'name_desc' ? 'lf-active' : ''}" data-sort="name_desc">По названию: Я → А</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'new_desc' ? 'lf-active' : ''}" data-sort="new_desc">Сначала новые</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'new_asc' ? 'lf-active' : ''}" data-sort="new_asc">Сначала старые</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'chapters_desc' ? 'lf-active' : ''}" data-sort="chapters_desc">Больше глав</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'chapters_asc' ? 'lf-active' : ''}" data-sort="chapters_asc">Меньше глав</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'progress_desc' ? 'lf-active' : ''}" data-sort="progress_desc">Прогресс выше</button>
-                <button class="lf-dropdown-item ${state.settings.titleSort === 'progress_asc' ? 'lf-active' : ''}" data-sort="progress_asc">Прогресс ниже</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'name_asc' ? 'lf-active' : ''}" data-sort="name_asc">${t('sort_name_asc')}</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'name_desc' ? 'lf-active' : ''}" data-sort="name_desc">${t('sort_name_desc')}</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'new_desc' ? 'lf-active' : ''}" data-sort="new_desc">${t('sort_new_desc')}</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'new_asc' ? 'lf-active' : ''}" data-sort="new_asc">${t('sort_new_asc')}</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'chapters_desc' ? 'lf-active' : ''}" data-sort="chapters_desc">${t('sort_chapters_desc')}</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'chapters_asc' ? 'lf-active' : ''}" data-sort="chapters_asc">${t('sort_chapters_asc')}</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'progress_desc' ? 'lf-active' : ''}" data-sort="progress_desc">${t('sort_progress_desc')}</button>
+                <button class="lf-dropdown-item ${state.settings.titleSort === 'progress_asc' ? 'lf-active' : ''}" data-sort="progress_asc">${t('sort_progress_asc')}</button>
               </div>
             </div>
           </div>
@@ -2200,11 +2201,11 @@
           `).join('')}
           <div class="lf-dropdown">
             <button id="lf-archive-btn" class="lf-tab-btn lf-dropdown-trigger ${['completed', 'dropped'].includes(state.ui.activeTab) ? 'lf-active' : ''}">
-              ${state.ui.activeTab === 'dropped' ? 'Брошено' : (state.ui.activeTab === 'completed' ? 'Завершено' : 'Архив')} <span class="lf-arrow">▼</span>
+              ${state.ui.activeTab === 'dropped' ? t('tab_dropped') : (state.ui.activeTab === 'completed' ? t('tab_completed') : t('tab_archive'))} <span class="lf-arrow">▼</span>
             </button>
             <div class="lf-dropdown-content" id="lf-archive-dropdown">
-              <button class="lf-dropdown-item ${state.ui.activeTab === 'completed' ? 'lf-active' : ''}" data-tab="completed">Завершено</button>
-              <button class="lf-dropdown-item ${state.ui.activeTab === 'dropped' ? 'lf-active' : ''}" data-tab="dropped">Брошено</button>
+              <button class="lf-dropdown-item ${state.ui.activeTab === 'completed' ? 'lf-active' : ''}" data-tab="completed">${t('tab_completed')}</button>
+              <button class="lf-dropdown-item ${state.ui.activeTab === 'dropped' ? 'lf-active' : ''}" data-tab="dropped">${t('tab_dropped')}</button>
             </div>
           </div>
         </div>
@@ -2358,7 +2359,7 @@
         <!-- Резервное копирование -->
         <div class="lf-settings-section lf-collapsible ${state.ui.syncBackupExpanded ? 'lf-expanded' : ''}">
           <div class="lf-settings-section-header" id="lf-toggle-sync-backup">
-            <h3 class="lf-settings-title" style="margin: 0;">Синхронизация</h3>
+            <h3 class="lf-settings-title" style="margin: 0;">${t('settings_title_sync')}</h3>
             <svg class="lf-collapse-arrow" viewBox="0 0 24 24">
               <path d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z" />
             </svg>
@@ -2369,91 +2370,91 @@
                 <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: currentColor;">
                   <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
                 </svg>
-                Экспорт ZIP
+                ${t('settings_export_btn')}
               </button>
               
               <button id="lf-import-btn" class="lf-btn-secondary" style="flex: 1; margin: 0; padding: 6px 10px; font-size: 11px; height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
                 <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: currentColor;">
                   <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
                 </svg>
-                Импорт ZIP
+                ${t('settings_import_btn')}
               </button>
               <input type="file" id="lf-import-input" accept=".zip" style="display: none;">
             </div>
             
             <div style="margin-bottom: 12px;">
               <button id="lf-full-sync-btn" class="lf-btn-secondary" style="width: 100%; margin: 0; padding: 6px 10px; font-size: 11px; height: 28px; display: flex; justify-content: center; align-items: center;">
-                Полная пересинхронизация
+                ${t('settings_full_sync_btn')}
               </button>
             </div>
 
             <div class="lf-settings-divider"></div>
 
-            <h4 class="lf-settings-subtitle">Облачная синхронизация</h4>
+            <h4 class="lf-settings-subtitle">${t('settings_cloud_sync_title')}</h4>
             <div class="lf-settings-desc" style="margin-bottom: 10px;">
-              Синхронизация настроек и прогресса с облаком в формате ZIP-архива. При открытии панели выполняется автоматическое обновление.
+              ${t('settings_cloud_sync_desc')}
             </div>
 
             <!-- Группа выбора провайдера -->
-            <label class="lf-settings-label" style="margin-top: 8px;">Выберите облако</label>
+            <label class="lf-settings-label" style="margin-top: 8px;">${t('settings_select_cloud')}</label>
             <select id="lf-provider-select" class="lf-settings-select" style="margin-top: 4px; margin-bottom: 12px; width: 100%;" ${state.ui.webdavSyncing || state.ui.webdavTesting ? 'disabled' : ''}>
-              <option value="yandex" ${webdavConfig.provider === 'yandex' ? 'selected' : ''}>Яндекс.Диск</option>
-              <option value="webdav" ${webdavConfig.provider === 'webdav' ? 'selected' : ''}>Другой WebDAV</option>
+              <option value="yandex" ${webdavConfig.provider === 'yandex' ? 'selected' : ''}>${t('settings_yandex_disk')}</option>
+              <option value="webdav" ${webdavConfig.provider === 'webdav' ? 'selected' : ''}>${t('settings_other_webdav')}</option>
             </select>
 
             ${webdavConfig.provider === 'yandex' ? `
             <details class="lf-webdav-guide">
-              <summary>Как подключить Яндекс.Диск</summary>
+              <summary>${t('webdav_guide_yandex_title')}</summary>
               <ol class="lf-webdav-guide-list">
-                <li>Перейдите на страницу <a href="https://id.yandex.ru/security/app-passwords" target="_blank" class="lf-link">Яндекс ID → Пароли приложений</a>.</li>
-                <li>Создайте новый пароль приложения с типом <strong>«Файлы (Яндекс.Диск)»</strong>.</li>
-                <li>Введите ваше имя пользователя (логин без @yandex.ru) и сгенерированный пароль приложения в поля ниже.</li>
-                <li>Нажмите кнопку «Синхронизировать» для первой выгрузки данных.</li>
+                <li>${t('webdav_guide_yandex_step1')}</li>
+                <li>${t('webdav_guide_yandex_step2')}</li>
+                <li>${t('webdav_guide_yandex_step3')}</li>
+                <li>${t('webdav_guide_yandex_step4')}</li>
               </ol>
             </details>
             ` : `
             <details class="lf-webdav-guide">
-              <summary>Как подключить Nextcloud или другой WebDAV</summary>
+              <summary>${t('webdav_guide_other_title')}</summary>
               <ol class="lf-webdav-guide-list">
-                <li>На сервере создайте <strong>код доступа для приложения</strong> — это не пароль от вашего аккаунта. В Nextcloud: «Настройки → Безопасность → Устройства и сессии → Создать новый код доступа приложения».</li>
-                <li>Скопируйте <strong>адрес WebDAV</strong> из настроек файлов. Для Nextcloud он выглядит так: <code>https://ваш-сервер/remote.php/dav/files/имя/</code></li>
-                <li>Вставьте адрес, имя пользователя и сгенерированный код ниже. Код показывается один раз — сохраните его.</li>
-                <li>Нажмите кнопку «Синхронизировать» для первой выгрузки данных.</li>
+                <li>${t('webdav_guide_other_step1')}</li>
+                <li>${t('webdav_guide_other_step2')}</li>
+                <li>${t('webdav_guide_other_step3')}</li>
+                <li>${t('webdav_guide_other_step4')}</li>
               </ol>
             </details>
             `}
 
             <div class="lf-settings-row">
               <label class="lf-settings-label" for="lf-webdav-enabled">
-                Автоматическая синхронизация
-                <div class="lf-settings-desc">Автоматическое фоновое скачивание при открытии и выгрузка изменений в облако.</div>
+                ${t('settings_auto_sync_label')}
+                <div class="lf-settings-desc">${t('settings_auto_sync_desc')}</div>
               </label>
               <input type="checkbox" id="lf-webdav-enabled" class="lf-settings-checkbox" ${webdavConfig.enabled ? 'checked' : ''}>
             </div>
 
             <div class="lf-webdav-fields" style="margin-bottom: 12px;">
               ${webdavConfig.provider === 'webdav' ? `
-              <label class="lf-settings-label" for="lf-webdav-base-url">Адрес WebDAV-сервера</label>
+              <label class="lf-settings-label" for="lf-webdav-base-url">${t('settings_webdav_url')}</label>
               <div class="lf-input-wrapper">
                 <input type="url" id="lf-webdav-base-url" class="lf-settings-input" style="padding-right: 28px;" value="${escapeHtml(webdavConfig.baseUrl)}" placeholder="https://cloud.example.com/remote.php/dav/files/user/" autocomplete="off">
                 ${webdavConfig.baseUrl ? `<button class="lf-input-clear-btn" data-clear="lf-webdav-base-url" type="button">&times;</button>` : ''}
               </div>
               ` : ''}
 
-              <label class="lf-settings-label" for="lf-webdav-username" style="margin-top: 8px;">Имя пользователя</label>
+              <label class="lf-settings-label" for="lf-webdav-username" style="margin-top: 8px;">${t('settings_webdav_username')}</label>
               <div class="lf-input-wrapper">
-                <input type="text" id="lf-webdav-username" class="lf-settings-input" style="padding-right: 28px;" value="${escapeHtml(webdavConfig.username)}" placeholder="${webdavConfig.provider === 'yandex' ? 'логин на Яндексе' : 'user'}" autocomplete="username">
+                <input type="text" id="lf-webdav-username" class="lf-settings-input" style="padding-right: 28px;" value="${escapeHtml(webdavConfig.username)}" placeholder="${webdavConfig.provider === 'yandex' ? t('settings_webdav_username_yandex_placeholder') : t('settings_webdav_username_placeholder')}" autocomplete="username">
                 ${webdavConfig.username ? `<button class="lf-input-clear-btn" data-clear="lf-webdav-username" type="button">&times;</button>` : ''}
               </div>
 
               <label class="lf-settings-label" for="lf-webdav-access-code" style="margin-top: 8px;">
-                Код доступа
+                ${t('settings_webdav_access_code')}
                 <div class="lf-settings-desc">
-                  ${webdavConfig.provider === 'yandex' ? 'Сгенерированный пароль приложения Яндекс ID.' : 'Сгенерированный на сервере код приложения, не пароль от аккаунта.'}
+                  ${webdavConfig.provider === 'yandex' ? t('settings_webdav_code_desc_yandex') : t('settings_webdav_code_desc_other')}
                 </div>
               </label>
               <div class="lf-input-wrapper">
-                <input type="text" id="lf-webdav-access-code" class="lf-settings-input ${state.ui.showAccessCode ? '' : 'lf-settings-input-password'}" style="padding-right: 48px;" value="${webdavConfig.accessCode ? (state.ui.showAccessCode ? escapeHtml(webdavConfig.accessCode) : '••••••••') : ''}" placeholder="Вставьте код доступа" autocomplete="off">
+                <input type="text" id="lf-webdav-access-code" class="lf-settings-input ${state.ui.showAccessCode ? '' : 'lf-settings-input-password'}" style="padding-right: 48px;" value="${webdavConfig.accessCode ? (state.ui.showAccessCode ? escapeHtml(webdavConfig.accessCode) : '••••••••') : ''}" placeholder="${t('settings_webdav_code_placeholder')}" autocomplete="off">
                 ${webdavConfig.accessCode ? `<button class="lf-input-clear-btn" data-clear="lf-webdav-access-code" type="button" style="right: 26px;">&times;</button>` : ''}
                 <button id="lf-webdav-toggle-code-btn" class="lf-input-eye-btn" type="button">
                   ${state.ui.showAccessCode ? `
@@ -2471,7 +2472,7 @@
 
             <div class="lf-settings-buttons" style="margin-top: 16px; margin-bottom: 12px; position: relative; flex-direction: column;">
               <button id="lf-webdav-sync-btn" class="lf-btn-primary" style="width: 100%; display: flex; justify-content: center; align-items: center;" ${state.ui.webdavSyncing || state.ui.webdavTesting ? 'disabled' : ''}>
-                ${state.ui.webdavSyncing ? 'Синхронизация...' : 'Синхронизировать'}
+                ${state.ui.webdavSyncing ? t('settings_webdav_syncing_btn') : t('settings_webdav_sync_btn')}
               </button>
               ${state.ui.webdavSyncing ? `
                 <div class="lf-sync-progress-bar-container">
@@ -2481,7 +2482,7 @@
             </div>
 
             <div class="lf-webdav-status">
-              <span>Последняя синхронизация: ${formatSyncDate(webdavConfig.lastSyncAt)}</span>
+              <span>${t('settings_webdav_last_sync', webdavConfig.lastSyncAt ? formatSyncDate(webdavConfig.lastSyncAt) : t('settings_webdav_never_sync'))}</span>
               ${webdavConfig.lastSyncStatus ? `<span class="lf-webdav-status-note">${escapeHtml(webdavConfig.lastSyncStatus)}</span>` : ''}
             </div>
           </div>
@@ -2489,50 +2490,50 @@
 
         <!-- Параметры отслеживания -->
         <div class="lf-settings-section">
-          <h3 class="lf-settings-title">Настройки отслеживания</h3>
+          <h3 class="lf-settings-title">${t('settings_title_tracking')}</h3>
           
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-sync-likes">
-              Синхронизация по лайкам
-              <div class="lf-settings-desc">Считать лайкнутые посты на Boosty просмотренными главами.</div>
+              ${t('settings_sync_likes_label')}
+              <div class="lf-settings-desc">${t('settings_sync_likes_desc')}</div>
             </label>
             <input type="checkbox" id="lf-setting-sync-likes" class="lf-settings-checkbox" ${state.settings.syncLikes ? 'checked' : ''}>
           </div>
 
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-open-titles">
-              Открывать тайтлы в текущей вкладке
-              <div class="lf-settings-desc">Если отключено, тайтлы будут открываться в новой вкладке браузера.</div>
+              ${t('settings_open_titles_label')}
+              <div class="lf-settings-desc">${t('settings_open_titles_desc')}</div>
             </label>
             <input type="checkbox" id="lf-setting-open-titles" class="lf-settings-checkbox" ${state.settings.openTitlesInCurrentTab ? 'checked' : ''}>
           </div>
 
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-open-chapters-in-feed">
-              Искать главы в ленте тайтла (Бета)
-              <div class="lf-settings-desc">При клике на главу переходить на страницу тайтла и скроллить к посту в ленте вместо открытия отдельной страницы поста.</div>
+              ${t('settings_open_chapters_feed_label')}
+              <div class="lf-settings-desc">${t('settings_open_chapters_feed_desc')}</div>
             </label>
             <input type="checkbox" id="lf-setting-open-chapters-in-feed" class="lf-settings-checkbox" ${state.settings.openChaptersInFeed ? 'checked' : ''}>
           </div>
           <div id="lf-beta-warning" class="lf-beta-warning" style="display: none;">
             <div class="lf-beta-warning-text">
-              Данная функция находится в бета-тестировании, работает не везде и может функционировать некорректно в некоторых тайтлах.
+              ${t('settings_beta_warning_text')}
             </div>
-            <button id="lf-beta-warning-close" class="lf-beta-warning-close" title="Закрыть предупреждение">&times;</button>
+            <button id="lf-beta-warning-close" class="lf-beta-warning-close" title="&times;">&times;</button>
           </div>
 
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-save-player">
-              Запоминать время видео и аудио
-              <div class="lf-settings-desc">Автоматически восстанавливать прогресс воспроизведения медиаплееров Boosty.</div>
+              ${t('settings_save_player_label')}
+              <div class="lf-settings-desc">${t('settings_save_player_desc')}</div>
             </label>
             <input type="checkbox" id="lf-setting-save-player" class="lf-settings-checkbox" ${state.settings.savePlayerTime ? 'checked' : ''}>
           </div>
 
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-auto-mark">
-              Автоотметка при открытии
-              <div class="lf-settings-desc">Автоматически помечать главу как просмотренную при переходе по ссылке.</div>
+              ${t('settings_auto_mark_label')}
+              <div class="lf-settings-desc">${t('settings_auto_mark_desc')}</div>
             </label>
             <input type="checkbox" id="lf-setting-auto-mark" class="lf-settings-checkbox" ${state.settings.autoMarkOpen ? 'checked' : ''}>
           </div>
@@ -2540,12 +2541,12 @@
 
         <!-- Внешний вид -->
         <div class="lf-settings-section">
-          <h3 class="lf-settings-title">Интерфейс</h3>
+          <h3 class="lf-settings-title">${t('settings_title_interface')}</h3>
           
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-zoom">
-              Масштаб боковой панели
-              <div class="lf-settings-desc">Настройте удобный размер текста и элементов интерфейса.</div>
+              ${t('settings_zoom_label')}
+              <div class="lf-settings-desc">${t('settings_zoom_desc')}</div>
             </label>
             <select id="lf-setting-zoom" class="lf-settings-select">
               <option value="1.0" ${state.settings.zoom === 1.0 ? 'selected' : ''}>80%</option>
@@ -2563,20 +2564,20 @@
         <!-- Порядок вкладок -->
         <div class="lf-settings-section lf-collapsible ${state.ui.tabOrderExpanded ? 'lf-expanded' : ''}">
           <div class="lf-settings-section-header" id="lf-toggle-tab-order">
-            <h3 class="lf-settings-title" style="margin: 0;">Порядок вкладок</h3>
+            <h3 class="lf-settings-title" style="margin: 0;">${t('settings_title_tab_order')}</h3>
             <svg class="lf-collapse-arrow" viewBox="0 0 24 24">
               <path d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z" />
             </svg>
           </div>
           <div class="lf-settings-section-body">
             <div class="lf-settings-desc" style="margin-bottom: 12px;">
-              Настройте расположение вкладок категорий в боковой панели с помощью перетаскивания (Drag & Drop) за иконку или стрелок.
+              ${t('settings_tab_order_desc')}
             </div>
             <div class="lf-tab-order-list">
               ${state.settings.tabOrder.map((tabKey, idx) => `
                 <div class="lf-tab-order-item" data-index="${idx}">
                   <div style="display: flex; align-items: center; gap: 8px;">
-                    <div class="lf-drag-handle" title="Перетащить">
+                    <div class="lf-drag-handle" title="${t('settings_drag_handle_tooltip')}">
                       <svg viewBox="0 0 24 24">
                         <path d="M9,3H11V5H9V3M13,3H15V5H13V3M9,7H11V9H9V7M13,7H15V9H13V7M9,11H11V13H9V11M13,11H15V13H13V11M9,15H11V17H9V15M13,15H15V17H13V15M9,19H11V21H9V19M13,19H15V21H13V19Z" />
                       </svg>
@@ -2584,8 +2585,8 @@
                     <span class="lf-tab-order-name">${TAB_NAMES[tabKey] || tabKey}</span>
                   </div>
                   <div class="lf-tab-order-btns">
-                    <button class="lf-tab-order-btn lf-tab-up" data-index="${idx}" ${idx === 0 ? 'disabled' : ''} title="Вверх">▲</button>
-                    <button class="lf-tab-order-btn lf-tab-down" data-index="${idx}" ${idx === state.settings.tabOrder.length - 1 ? 'disabled' : ''} title="Вниз">▼</button>
+                    <button class="lf-tab-order-btn lf-tab-up" data-index="${idx}" ${idx === 0 ? 'disabled' : ''} title="${t('settings_tab_up_tooltip')}">▲</button>
+                    <button class="lf-tab-order-btn lf-tab-down" data-index="${idx}" ${idx === state.settings.tabOrder.length - 1 ? 'disabled' : ''} title="${t('settings_tab_down_tooltip')}">▼</button>
                   </div>
                 </div>
               `).join('')}
@@ -2599,13 +2600,13 @@
             <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
             </svg>
-            О расширении
+            ${t('settings_about_btn')}
           </button>
         </div>
 
         <div id="lf-delete-container" style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
           <button id="lf-delete-data-btn" class="lf-btn-secondary" style="width: 100%; border-color: rgba(211, 47, 47, 0.2); color: rgba(211, 47, 47, 0.7); font-size: 11px; padding: 6px 10px; margin: 0;">
-            Удалить сохранённые данные
+            ${t('settings_delete_data_btn')}
           </button>
         </div>
       </div>
@@ -2630,7 +2631,7 @@
       webdavEnabled.addEventListener('change', async (e) => {
         webdavConfig.enabled = e.target.checked;
         await saveWebDavConfig();
-        showNotification(e.target.checked ? 'Автоматическая синхронизация включена' : 'Автоматическая синхронизация отключена');
+        showNotification(e.target.checked ? t('notify_auto_sync_on') : t('notify_auto_sync_off'));
       });
     }
 
@@ -2721,7 +2722,7 @@
         if (!isConfirming) {
           // Переводим в состояние подтверждения
           deleteDataBtn.setAttribute('data-confirming', 'true');
-          deleteDataBtn.textContent = 'Вы точно уверены? Нажмите для удаления';
+          deleteDataBtn.textContent = t('settings_delete_data_confirm_btn');
           deleteDataBtn.style.backgroundColor = '#d32f2f';
           deleteDataBtn.style.color = '#ffffff';
           deleteDataBtn.style.borderColor = '#d32f2f';
@@ -2733,7 +2734,7 @@
           cancelBtn.style.width = '100%';
           cancelBtn.style.fontSize = '11px';
           cancelBtn.style.padding = '6px 10px';
-          cancelBtn.textContent = 'Отмена';
+          cancelBtn.textContent = t('settings_cancel');
           
           cancelBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -2752,7 +2753,7 @@
           if (deleteTimeout) clearTimeout(deleteTimeout);
           
           chrome.storage.local.clear(() => {
-            showNotification('Все данные успешно удалены');
+            showNotification(t('notify_data_deleted'));
             
             // Сбрасываем локальное состояние
             state.posts = [];
@@ -2794,7 +2795,7 @@
       function resetDeleteButton() {
         if (deleteTimeout) clearTimeout(deleteTimeout);
         deleteDataBtn.removeAttribute('data-confirming');
-        deleteDataBtn.textContent = 'Удалить сохранённые данные';
+        deleteDataBtn.textContent = t('settings_delete_data_btn');
         deleteDataBtn.style.backgroundColor = '';
         deleteDataBtn.style.color = '';
         deleteDataBtn.style.borderColor = '';
@@ -2820,14 +2821,14 @@
     syncLikesCheckbox.addEventListener('change', (e) => {
       state.settings.syncLikes = e.target.checked;
       saveStateToStorage();
-      showNotification(e.target.checked ? 'Синхронизация по лайкам включена' : 'Синхронизация по лайкам отключена');
+      showNotification(e.target.checked ? t('notify_sync_likes_on') : t('notify_sync_likes_off'));
     });
 
     const autoMarkCheckbox = document.getElementById('lf-setting-auto-mark');
     autoMarkCheckbox.addEventListener('change', (e) => {
       state.settings.autoMarkOpen = e.target.checked;
       saveStateToStorage();
-      showNotification(e.target.checked ? 'Автоотметка включена' : 'Автоотметка отключена');
+      showNotification(e.target.checked ? t('notify_auto_mark_on') : t('notify_auto_mark_off'));
     });
 
     const savePlayerCheckbox = document.getElementById('lf-setting-save-player');
@@ -2843,7 +2844,7 @@
       openTitlesCheckbox.addEventListener('change', (e) => {
         state.settings.openTitlesInCurrentTab = e.target.checked;
         saveStateToStorage();
-        showNotification(e.target.checked ? 'Тайтлы открываются в текущей вкладке' : 'Тайтлы открываются в новой вкладке');
+        showNotification(e.target.checked ? t('notify_open_titles_current') : t('notify_open_titles_new'));
       });
     }
 
@@ -2852,7 +2853,7 @@
       openChaptersCheckbox.addEventListener('change', (e) => {
         state.settings.openChaptersInFeed = e.target.checked;
         saveStateToStorage();
-        showNotification(e.target.checked ? 'Включен переход к главам в ленте' : 'Включено открытие отдельных страниц глав');
+        showNotification(e.target.checked ? t('notify_chapters_feed_on') : t('notify_chapters_feed_off'));
         
         const warningBlock = document.getElementById('lf-beta-warning');
         if (warningBlock) {
@@ -2884,7 +2885,7 @@
           sidebar.style.setProperty('--lf-zoom', newZoom);
         }
         
-        showNotification(`Масштаб изменен на ${Math.round(newZoom * 80)}%`);
+        showNotification(t('notify_zoom_changed', Math.round(newZoom * 80)));
         render();
       });
     }
@@ -3001,7 +3002,7 @@
           <svg viewBox="0 0 24 24">
             <path d="M20,11H7.83L13.41,5.41L12,4L4,12L12,20L13.41,18.59L7.83,13H20V11Z" />
           </svg>
-          Назад к настройкам
+          ${t('about_back_btn')}
         </div>
 
         <!-- Единая карточка о расширении -->
@@ -3012,13 +3013,13 @@
           </div>
           
           <div style="color: var(--lf-text-muted);">
-            Удобная библиотека для отслеживания прогресса озвучек и других постов на Boosty. Позволяет структурировать публикации по произведениям, отмечать прочитанные главы и сохранять личные заметки (временно адаптировано только под автора <em>lightfoxmanga</em>).
+            ${t('about_desc')}
           </div>
 
           <div style="border-top: 1px solid var(--lf-border); padding-top: 8px; font-size: 11px; color: var(--lf-text-muted); display: flex; flex-direction: column; gap: 4px; line-height: 1.4;">
-            <div>Автор и разработчик: <strong style="color: var(--lf-text);">Akai</strong></div>
-            <div>Лицензия: <strong style="color: var(--lf-text);">MIT</strong></div>
-            <div>Конфиденциальность: <strong style="color: var(--lf-text);">Данные хранятся локально</strong></div>
+            <div>${t('about_author')}<strong style="color: var(--lf-text);">Akai</strong></div>
+            <div>${t('about_license')}<strong style="color: var(--lf-text);">MIT</strong></div>
+            <div>${t('about_privacy')}<strong style="color: var(--lf-text);">${t('about_privacy_desc')}</strong></div>
           </div>
 
           <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -3026,20 +3027,20 @@
               <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: var(--lf-text-muted);">
                 <path d="M12,2A10,10 0 0,0 2,12C2,16.42 4.87,20.17 8.84,21.5C9.34,21.58 9.5,21.27 9.5,21C9.5,20.77 9.5,20.14 9.5,19.31C6.73,19.91 6.14,17.97 6.14,17.97C5.68,16.81 5.03,16.5 5.03,16.5C4.12,15.88 5.1,15.9 5.1,15.9C6.1,15.97 6.63,16.93 6.63,16.93C7.5,18.45 8.97,18 9.54,17.76C9.63,17.11 9.89,16.67 10.17,16.42C7.95,16.17 5.62,15.31 5.62,11.5C5.62,10.39 6,9.5 6.65,8.79C6.55,8.54 6.2,7.5 6.75,6.15C6.75,6.15 7.59,5.88 9.5,7.17C10.29,6.95 11.15,6.84 12,6.84C12.85,6.84 13.71,6.95 14.5,7.17C16.41,5.88 17.25,6.15 17.25,6.15C17.8,7.5 17.45,8.54 17.35,8.79C18,9.5 18.38,10.39 18.38,11.5C18.38,15.32 16.04,16.16 13.81,16.41C14.17,16.72 14.5,17.33 14.5,18.26C14.5,19.6 14.5,20.68 14.5,21C14.5,21.27 14.66,21.59 15.17,21.5C19.14,20.16 22,16.42 22,12A10,10 0 0,0 12,2Z" />
               </svg>
-              <a href="https://github.com/akai2211/boosty-bookmark" target="_blank" style="color: var(--lf-primary); text-decoration: none; font-weight: 600;">GitHub Репозиторий</a>
+              <a href="https://github.com/akai2211/boosty-bookmark" target="_blank" style="color: var(--lf-primary); text-decoration: none; font-weight: 600;">${t('about_github')}</a>
             </div>
             <div style="display: flex; align-items: center; gap: 6px;">
               <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: var(--lf-text-muted);">
                 <path d="M20,2H4C2.9,2,2,2.9,2,4v18l4-4h14c1.1,0,2-0.9,2-2V4C22,2.9,21.1,2,20,2z M12,14c-1.1,0-2-0.9-2-2c0-1.1,0.9-2,2-2s2,0.9,2,2C14,13.1,13.1,14,12,14z M13,9h-2V5h2V9z" />
               </svg>
-              <a href="https://github.com/akai2211/boosty-bookmark/issues" target="_blank" style="color: var(--lf-primary); text-decoration: none; font-weight: 600;">Связаться с автором / Предложить идею</a>
+              <a href="https://github.com/akai2211/boosty-bookmark/issues" target="_blank" style="color: var(--lf-primary); text-decoration: none; font-weight: 600;">${t('about_feedback')}</a>
             </div>
           </div>
         </div>
 
         <!-- Поддержать проект -->
         <div class="lf-settings-section" style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
-          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--lf-text-muted);">Поддержать проект</div>
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--lf-text-muted);">${t('about_support')}</div>
           
           <div style="display: flex; gap: 8px;">
             <a href="https://www.donationalerts.com/r/your_username" target="_blank" class="lf-btn-secondary" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; margin: 0; font-size: 11px; padding: 6px 10px; font-weight: 600; background-color: rgba(238, 120, 41, 0.08); border-color: rgba(238, 120, 41, 0.3); color: #ee7829;">
@@ -3093,8 +3094,8 @@
             <!-- белая закладка с вырезанной молнией -->
             <path class="lf-logo-path" fill="#ffffff" d="${BOOKMARK_SVG_PATH}" />
           </svg>
-          <div>База пуста. Пожалуйста, запустите синхронизацию, нажав на кнопку со стрелками вверху.</div>
-          <button id="lf-empty-sync-btn" style="padding: 8px 16px; background-color: var(--lf-primary); border: none; border-radius: var(--lf-border-radius); color: #fff; cursor: pointer; font-weight: 600;">Запустить</button>
+          <div>${t('empty_db_notice')}</div>
+          <button id="lf-empty-sync-btn" style="padding: 8px 16px; background-color: var(--lf-primary); border: none; border-radius: var(--lf-border-radius); color: #fff; cursor: pointer; font-weight: 600;">${t('empty_db_run_btn')}</button>
         </div>
       `;
       document.getElementById('lf-empty-sync-btn').addEventListener('click', performFullSync);
@@ -3305,7 +3306,7 @@
         <svg class="lf-group-arrow" viewBox="0 0 24 24">
           <path d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z" />
         </svg>
-        <span>${groupName}</span>
+        <span>${tCategory(groupName)}</span>
       </div>
       ${countHtml}
     `;
@@ -3536,11 +3537,11 @@
 
   function getStatusTooltip(color) {
     switch (color) {
-      case 'green': return 'Просмотрено полностью';
-      case 'yellow': return 'Есть непросмотренные главы';
-      case 'red': return 'Брошено';
+      case 'green': return t('tooltip_completed');
+      case 'yellow': return t('tooltip_watching');
+      case 'red': return t('tooltip_dropped');
       case 'grey':
-      default: return 'Просмотр не начат';
+      default: return t('tooltip_none');
     }
   }
 
@@ -3573,14 +3574,14 @@
           <svg viewBox="0 0 24 24">
             <path d="M20,11H7.83L13.41,5.41L12,4L4,12L12,20L13.41,18.59L7.83,13H20V11Z" />
           </svg>
-          Назад к списку
+          ${t('detail_back_btn')}
         </div>
         
         <!-- Заголовок -->
         <h2 class="lf-detail-title">
           ${isAnnouncements 
             ? `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(manga.name)}</span>`
-            : `<a class="lf-detail-title-link" href="${tagUrl}" ${targetAttr} title="Открыть тег на Boosty">
+            : `<a class="lf-detail-title-link" href="${tagUrl}" ${targetAttr} title="${t('detail_title_tag_tooltip')}">
                 <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(manga.name)}</span>
                 <svg viewBox="0 0 24 24">
                   <path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
@@ -3589,37 +3590,37 @@
           }
         </h2>
         
-        <div class="lf-detail-category">${manga.category ? escapeHtml(manga.category) : 'Категория не определена'}</div>
+        <div class="lf-detail-category">${manga.category ? escapeHtml(tCategory(manga.category)) : t('detail_category_undefined')}</div>
         
         <!-- Статус -->
         ${isAnnouncements ? '' : `
           <div class="lf-status-container">
-            <span class="lf-field-label">Статус отслеживания</span>
+            <span class="lf-field-label">${t('detail_tracking_status_label')}</span>
             <select class="lf-status-select" id="lf-status-select">
-              <option value="favorite" ${manga.status === 'favorite' ? 'selected' : ''}>⭐ Избранное</option>
-              <option value="watching" ${manga.status === 'watching' ? 'selected' : ''}>🟡 Смотрю</option>
-              <option value="completed" ${manga.status === 'completed' ? 'selected' : ''}>🟢 Завершено</option>
-              <option value="dropped" ${manga.status === 'dropped' ? 'selected' : ''}>🔴 Брошено</option>
-              <option value="none" ${manga.status === 'none' ? 'selected' : ''}>⚪ Не отслеживаю</option>
+              <option value="favorite" ${manga.status === 'favorite' ? 'selected' : ''}>${t('detail_status_favorite')}</option>
+              <option value="watching" ${manga.status === 'watching' ? 'selected' : ''}>${t('detail_status_watching')}</option>
+              <option value="completed" ${manga.status === 'completed' ? 'selected' : ''}>${t('detail_status_completed')}</option>
+              <option value="dropped" ${manga.status === 'dropped' ? 'selected' : ''}>${t('detail_status_dropped')}</option>
+              <option value="none" ${manga.status === 'none' ? 'selected' : ''}>${t('detail_status_none')}</option>
             </select>
           </div>
         `}
         
         <!-- Блокнот -->
         <div class="lf-notes-container">
-          <span class="lf-field-label">Блокнот (Заметки)</span>
-          <textarea class="lf-notes-textarea" id="lf-notes-textarea" placeholder="Напишите здесь важные заметки... (сохраняется автоматически)">${escapeHtml(manga.notes)}</textarea>
+          <span class="lf-field-label">${t('detail_notes_label')}</span>
+          <textarea class="lf-notes-textarea" id="lf-notes-textarea" placeholder="${t('detail_notes_placeholder')}">${escapeHtml(manga.notes)}</textarea>
         </div>
         
         <!-- Раздел глав -->
         <div>
           <div class="lf-chapters-header">
-            <span class="lf-field-label">Список глав (${manga.readCount}/${manga.posts.length})</span>
+            <span class="lf-field-label">${t('detail_chapters_count_label', manga.readCount, manga.posts.length)}</span>
             <button class="lf-sort-btn" id="lf-sort-btn">
               <svg viewBox="0 0 24 24" style="transform: ${state.ui.sortAsc ? 'none' : 'rotate(180deg)'}">
                 <path d="M10,18H14V16H10V18M3,6V8H21V6H3M6,13H18V11H6V13Z" />
               </svg>
-              ${state.ui.sortAsc ? 'Старые вверху' : 'Новые вверху'}
+              ${state.ui.sortAsc ? t('detail_chapters_sort_oldest') : t('detail_chapters_sort_newest')}
             </button>
           </div>
           
@@ -3648,8 +3649,7 @@
         
         // Показываем уведомление о переносе тайтла
         if (newStatus !== 'none') {
-          const statusesRu = { watching: 'Смотрю', favorite: 'Избранное', completed: 'Завершено', dropped: 'Брошено' };
-          showNotification(`Тайтл перенесен в раздел «${statusesRu[newStatus]}»`);
+          showNotification(t('notify_title_moved', t('status_' + newStatus)));
         }
       });
     }
