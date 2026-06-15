@@ -261,6 +261,49 @@ test.describe('E2E-тесты расширения Boosty Bookmark', () => {
     await expect(mangaTitle).toBeVisible();
   });
 
+  test('Очистка новинок с двухэтапным подтверждением', async () => {
+    await page.goto('https://boosty.to/lightfoxmanga');
+    await page.click('#lf-trigger-btn');
+
+    // Включаем эмуляцию даты и ставим отсечку на 2026-05-10 (постов от 15 мая еще нет в выборке)
+    await page.click('#lf-dev-trigger-btn');
+    await page.locator('#lf-dev-enabled').check();
+    await page.locator('#lf-dev-cutoff-date').fill('2026-05-10');
+    await page.click('#lf-dev-save-btn');
+    await expect(page.locator('.lf-loading-overlay')).toBeHidden({ timeout: 15000 });
+
+    // Сдвигаем отсечку на 2026-06-01 (появляются посты от 15 мая)
+    await page.locator('#lf-dev-cutoff-date').fill('2026-06-01');
+    await page.click('#lf-dev-save-btn');
+    await expect(page.locator('.lf-loading-overlay')).toBeHidden({ timeout: 15000 });
+    await page.click('.lf-dev-close');
+
+    // Переходим на вкладку "Новые"
+    const newTab = page.locator('.lf-tab-btn:has-text("Новые")');
+    await newTab.click();
+
+    // Группа "Новые тайтлы" должна быть развернута, проверяем наличие тайтла
+    const mangaTitle = page.locator('.lf-manga-title:has-text("Реинкарнация бездельника")').first();
+    await expect(mangaTitle).toBeVisible();
+
+    // Кнопка очистки должна быть видна
+    const clearBtn = page.locator('#lf-clear-all-new-btn');
+    await expect(clearBtn).toBeVisible();
+    await expect(clearBtn).toHaveText(/Очистить всё/);
+
+    // Первый клик: кнопка переходит в режим подтверждения
+    await clearBtn.click();
+    await expect(clearBtn).toHaveText(/Точно очистить\?/);
+    await expect(clearBtn).toHaveClass(/lf-confirming/);
+
+    // Второй клик: очистка
+    await clearBtn.click();
+
+    // Новинки должны исчезнуть
+    await expect(mangaTitle).not.toBeVisible();
+    await expect(clearBtn).not.toBeVisible();
+  });
+
   test('Сброс данных с двухэтапным подтверждением', async () => {
     await page.goto('https://boosty.to/lightfoxmanga');
     await page.click('#lf-trigger-btn');

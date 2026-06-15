@@ -292,6 +292,19 @@
   border-bottom-color: var(--lf-primary);
 }
 
+.lf-tab-badge {
+  background-color: var(--lf-primary);
+  color: #ffffff;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 10px;
+  margin-left: 4px;
+  display: inline-block;
+  vertical-align: middle;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 /* Dropdown Menu for Completed/Dropped */
 .lf-dropdown {
   position: relative;
@@ -496,15 +509,61 @@
 }
 
 .lf-manga-meta {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
   flex-shrink: 0;
+  min-height: 22px;
 }
 
 .lf-manga-progress {
   font-size: 11px;
   color: var(--lf-text-muted);
+  transition: opacity 0.2s ease;
+  user-select: none;
+}
+
+.lf-manga-row:hover .lf-has-delete .lf-manga-progress {
+  opacity: 0;
+}
+
+.lf-manga-delete-new-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%) scale(0);
+  opacity: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lf-primary);
+  transition: transform 0.2s ease, opacity 0.2s ease, color 0.2s ease;
+  z-index: 2;
+  padding: 0;
+  margin: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.lf-manga-row:hover .lf-manga-delete-new-btn {
+  transform: translateY(-50%) scale(1);
+  opacity: 1;
+}
+
+.lf-manga-delete-new-btn:hover {
+  color: var(--lf-primary-hover);
+  transform: translateY(-50%) scale(1.2);
+}
+
+.lf-manga-delete-new-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
 }
 
 /* Detail View Layout */
@@ -1615,6 +1674,52 @@
   font-size: 10px !important;
   color: #888888 !important;
   line-height: 1.4;
+}
+
+.lf-new-tab-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.lf-clear-all-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background-color: var(--lf-hover-bg);
+  border: 1px solid var(--lf-border);
+  border-radius: 4px;
+  color: var(--lf-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lf-clear-all-new-btn:hover {
+  background-color: rgba(255, 87, 34, 0.1);
+  border-color: var(--lf-primary);
+  color: var(--lf-primary);
+}
+
+.lf-clear-all-new-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.lf-clear-all-new-btn.lf-confirming {
+  background-color: rgba(244, 67, 54, 0.1);
+  border-color: #f44336;
+  color: #f44336;
+}
+
+.lf-clear-all-new-btn.lf-confirming:hover {
+  background-color: rgba(244, 67, 54, 0.2);
+  border-color: #d32f2f;
+  color: #d32f2f;
 }
 
 body.lf-dev-hide-about-author [class*="AboutAuthor-scss--module_content_"] {

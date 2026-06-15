@@ -101,13 +101,15 @@
     collapsedGroups: {},// Свернутые категории { "Любителям манги": true }
     blogDescriptionLinks: [], // Ссылки из описания профиля [{url, title}]
     playerTimestamps: {}, // Сохраненные таймстампы плееров { [id]: timeInSeconds }
+    newTitles: [],      // Имена новых тайтлов
+    newChapters: [],     // Имена тайтлов с новыми главами
     settings: {
       syncLikes: true,   // Учитывать лайки как просмотренное
       autoMarkOpen: false, // Автоматически помечать главу как прочитанную при открытии
       savePlayerTime: true, // Сохранять и восстанавливать время видео/аудио
       forceVideoQuality: false, // Принудительное качество видео
       videoQuality: '1080p', // Предпочитаемое качество видео по умолчанию
-      tabOrder: ['favorite', 'all', 'watching', 'new', 'completed', 'dropped'],
+      tabOrder: ['favorite', 'new', 'watching', 'all', 'completed', 'dropped'],
       zoom: 1.25,         // Коэффициент масштаба боковой панели (соответствует 100% в UI)
       zoomMigrated: true, // Флаг выполненной миграции масштаба
       sidebarOpen: false, // Состояние открытости панели (сохраняется)
@@ -476,18 +478,7 @@
     
     // Слушаем закрытие страницы, чтобы обновить время последнего визита
     eventHandlers.beforeunload = () => {
-      if (!isExtensionContextValid()) { cleanup(); return; }
-      try {
-        chrome.storage.local.get([STORAGE_KEY], (res) => {
-          const data = res[STORAGE_KEY] || {};
-          data.lastVisit = Date.now();
-          const update = {};
-          update[STORAGE_KEY] = data;
-          chrome.storage.local.set(update);
-        });
-      } catch (e) {
-        // Контекст инвалидирован — игнорируем
-      }
+      // Больше не требуется автоматическое обновление lastVisit при выходе
     };
     window.addEventListener('beforeunload', eventHandlers.beforeunload);
 
@@ -542,6 +533,20 @@
     document.addEventListener('click', eventHandlers.headerClickHandler);
   }
 
+  function updateExtensionBadge() {
+    if (!isExtensionContextValid()) return;
+    try {
+      const newCount = (state.newTitles ? state.newTitles.length : 0) + (state.newChapters ? state.newChapters.length : 0);
+      if (newCount > 0) {
+        chrome.runtime.sendMessage({ action: 'updateBadge', text: String(newCount) });
+      } else {
+        chrome.runtime.sendMessage({ action: 'updateBadge', text: '' });
+      }
+    } catch (e) {
+      // Игнорируем ошибки обмена сообщениями
+    }
+  }
+
   // Загрузка состояния из chrome.storage.local
   function loadStateFromStorage() {
     return new Promise((resolve) => {
@@ -556,6 +561,8 @@
           state.collapsedGroups = saved.collapsedGroups || {};
           state.blogDescriptionLinks = saved.blogDescriptionLinks || [];
           state.playerTimestamps = saved.playerTimestamps || {};
+          state.newTitles = saved.newTitles || [];
+          state.newChapters = saved.newChapters || [];
           if (saved.settings) {
             state.settings = { ...state.settings, ...saved.settings };
             state.settings.forceVideoQuality = false; // Временно заморожено (не работает)
@@ -574,11 +581,13 @@
           }
           const oldDefaultOrder1 = ['favorite', 'watching', 'new', 'all', 'completed', 'dropped'];
           const oldDefaultOrder2 = ['favorite', 'all', 'new', 'watching', 'completed', 'dropped'];
-          const newDefaultOrder = ['favorite', 'all', 'watching', 'new', 'completed', 'dropped'];
+          const oldDefaultOrder3 = ['favorite', 'all', 'watching', 'new', 'completed', 'dropped'];
+          const newDefaultOrder = ['favorite', 'new', 'watching', 'all', 'completed', 'dropped'];
           if (!state.settings.tabOrder || !Array.isArray(state.settings.tabOrder) || state.settings.tabOrder.length === 0) {
             state.settings.tabOrder = newDefaultOrder;
           } else if (JSON.stringify(state.settings.tabOrder) === JSON.stringify(oldDefaultOrder1) || 
-                     JSON.stringify(state.settings.tabOrder) === JSON.stringify(oldDefaultOrder2)) {
+                     JSON.stringify(state.settings.tabOrder) === JSON.stringify(oldDefaultOrder2) ||
+                     JSON.stringify(state.settings.tabOrder) === JSON.stringify(oldDefaultOrder3)) {
             state.settings.tabOrder = newDefaultOrder;
             saveStateToStorage();
           }
@@ -614,6 +623,7 @@
             state.settings.zoom = 1.25;
             state.settings.zoomMigrated = true;
           }
+          updateExtensionBadge();
           resolve();
         });
       } catch (e) {
@@ -646,12 +656,15 @@
           collapsedGroups: state.collapsedGroups,
           blogDescriptionLinks: state.blogDescriptionLinks,
           playerTimestamps: state.playerTimestamps,
+          newTitles: state.newTitles,
+          newChapters: state.newChapters,
           settings: state.settings
         };
         const update = {};
         update[STORAGE_KEY] = data;
         chrome.storage.local.set(update, () => {
           if (chrome.runtime.lastError) { resolve(); return; }
+          updateExtensionBadge();
           debouncedWebDavUpload();
           resolve();
         });
@@ -688,6 +701,8 @@
                 collapsedGroups: state.collapsedGroups,
                 blogDescriptionLinks: state.blogDescriptionLinks,
                 playerTimestamps: state.playerTimestamps,
+                newTitles: state.newTitles,
+                newChapters: state.newChapters,
                 settings: state.settings
               };
             } else {
@@ -717,6 +732,8 @@
             collapsedGroups: state.collapsedGroups,
             blogDescriptionLinks: state.blogDescriptionLinks,
             playerTimestamps: state.playerTimestamps,
+            newTitles: state.newTitles,
+            newChapters: state.newChapters,
             settings: state.settings
           };
           const jsonString = JSON.stringify(currentChannelData, null, 2);
@@ -786,6 +803,8 @@
                 collapsedGroups: importedData.collapsedGroups || {},
                 blogDescriptionLinks: importedData.blogDescriptionLinks || [],
                 playerTimestamps: importedData.playerTimestamps || {},
+                newTitles: importedData.newTitles || [],
+                newChapters: importedData.newChapters || [],
                 settings: importedData.settings || {}
               };
               storageUpdates[`lf_state_${slug}`] = channelState;
@@ -818,6 +837,8 @@
           state.collapsedGroups = storageUpdates[currentChannelKey].collapsedGroups;
           state.blogDescriptionLinks = storageUpdates[currentChannelKey].blogDescriptionLinks;
           state.playerTimestamps = storageUpdates[currentChannelKey].playerTimestamps;
+          state.newTitles = storageUpdates[currentChannelKey].newTitles || [];
+          state.newChapters = storageUpdates[currentChannelKey].newChapters || [];
           state.settings = { ...state.settings, ...storageUpdates[currentChannelKey].settings };
         }
 
@@ -1567,8 +1588,20 @@
       const updatedPosts = Array.from(postMap.values());
       updatedPosts.sort((a, b) => b.publishTime - a.publishTime);
       
+      const oldPosts = [...state.posts];
       state.posts = updatedPosts;
       state.ui.syncProgress = 100;
+      
+      analyzeNewContent(oldPosts, state.posts);
+      
+      const hasNewContent = state.newTitles.length > 0 || state.newChapters.length > 0;
+      if (hasNewContent) {
+        state.ui.activeTab = 'new';
+        try {
+          sessionStorage.setItem('lf_active_tab', 'new');
+        } catch(e) {}
+      }
+      
       await saveStateToStorage();
       
       // Сбрасываем свернутые группы, чтобы отразить новые/обновленные посты
@@ -1653,10 +1686,21 @@
         await new Promise(r => setTimeout(r, 200));
       }
       
-      // Сохраняем в кэш
+      const oldPosts = [...state.posts];
       state.posts = allPosts;
       state.collapsedGroups = {};
       state.ui.syncProgress = 100;
+      
+      analyzeNewContent(oldPosts, state.posts);
+      
+      const hasNewContent = state.newTitles.length > 0 || state.newChapters.length > 0;
+      if (hasNewContent) {
+        state.ui.activeTab = 'new';
+        try {
+          sessionStorage.setItem('lf_active_tab', 'new');
+        } catch(e) {}
+      }
+      
       await saveStateToStorage();
       
       // Оповещение об успешной синхронизации
@@ -1695,6 +1739,7 @@
       }
       /* DEV_ONLY_END */
       
+      const oldPosts = [...state.posts];
       let hasUpdates = false;
       const postMap = new Map(state.posts.map(p => [p.id, p]));
       
@@ -1733,6 +1778,17 @@
       if (hasUpdates) {
         // Сортируем посты по времени публикации (по убыванию) на всякий случай
         state.posts.sort((a, b) => b.publishTime - a.publishTime);
+        
+        analyzeNewContent(oldPosts, state.posts);
+        
+        const hasNewContent = state.newTitles.length > 0 || state.newChapters.length > 0;
+        if (hasNewContent) {
+          state.ui.activeTab = 'new';
+          try {
+            sessionStorage.setItem('lf_active_tab', 'new');
+          } catch(e) {}
+        }
+        
         await saveStateToStorage();
         render();
       }
@@ -1741,8 +1797,87 @@
     }
   }
 
+  // Анализ новых постов и добавление тайтлов в списки Новые тайтлы / Новые главы
+  function analyzeNewContent(oldPosts, freshPosts) {
+    // В дев-режиме с эмуляцией даты:
+    const isDevEmulation = typeof devSettings !== 'undefined' && devSettings.enabled && devSettings.cutoffDate;
+    
+    if (isDevEmulation) {
+      const cutoffTimeMs = new Date(devSettings.cutoffDate).getTime();
+      
+      // Инициализируем lastVisit эмулируемой датой отсечки минус 1 день, если он равен 0 или не задан
+      if (!state.lastVisit || state.lastVisit === 0) {
+        state.lastVisit = cutoffTimeMs - 24 * 60 * 60 * 1000;
+      }
+      
+      state.newTitles = [];
+      state.newChapters = [];
+      
+      const allGrouped = getGroupedTitlesInternal(freshPosts);
+      allGrouped.forEach(manga => {
+        const firstPostTime = manga.posts.length > 0 ? manga.posts[0].publishTime * 1000 : 0;
+        const isNewTitle = firstPostTime > state.lastVisit;
+        if (isNewTitle) {
+          state.newTitles.push(manga.name);
+        } else {
+          const lastPostTime = manga.posts.length > 0 ? manga.posts[manga.posts.length - 1].publishTime * 1000 : 0;
+          const userData = state.user_data[manga.name] || { status: 'none' };
+          const isTracking = userData.status === 'watching' || userData.status === 'favorite';
+          const hasNewChapters = isTracking && lastPostTime > state.lastVisit && manga.readCount < manga.posts.length;
+          if (hasNewChapters) {
+            state.newChapters.push(manga.name);
+          }
+        }
+      });
+      saveStateToStorage();
+      return;
+    }
+    
+    // В обычном режиме:
+    if (!oldPosts || oldPosts.length === 0) {
+      // Это первая синхронизация, списки оставляем пустыми, но фиксируем lastVisit
+      state.lastVisit = Date.now();
+      saveStateToStorage();
+      return;
+    }
+    
+    const oldPostIds = new Set(oldPosts.map(p => p.id));
+    const oldGrouped = getGroupedTitlesInternal(oldPosts);
+    const oldTitleNames = new Set(oldGrouped.map(t => t.name));
+    
+    const newGrouped = getGroupedTitlesInternal(freshPosts);
+    let updated = false;
+    newGrouped.forEach(manga => {
+      const hasNewPosts = manga.posts.some(post => !oldPostIds.has(post.id));
+      if (hasNewPosts) {
+        if (!oldTitleNames.has(manga.name)) {
+          if (!state.newTitles.includes(manga.name)) {
+            state.newTitles.push(manga.name);
+            updated = true;
+          }
+        } else {
+          const userData = state.user_data[manga.name] || { status: 'none' };
+          const isTracking = userData.status === 'watching' || userData.status === 'favorite';
+          if (isTracking && manga.readCount < manga.posts.length) {
+            if (!state.newChapters.includes(manga.name)) {
+              state.newChapters.push(manga.name);
+              updated = true;
+            }
+          }
+        }
+      }
+    });
+    if (updated) {
+      saveStateToStorage();
+    }
+  }
+
   // Группировка постов по тайтлам (тегам)
   function getGroupedTitles() {
+    return getGroupedTitlesInternal(state.posts);
+  }
+
+  function getGroupedTitlesInternal(posts) {
     const titlesMap = {};
     const tagNamesMap = {};
     const postNamesMap = {};
@@ -1771,7 +1906,7 @@
     }
     
     // Если ссылка ведет на пост, связываем теги этого поста с красивым именем
-    state.posts.forEach(post => {
+    posts.forEach(post => {
       if (postNamesMap[post.id]) {
         const cleanName = postNamesMap[post.id];
         const cleanTags = post.tags.filter(t => !TAGS_BLACKLIST.includes(t.title.toLowerCase()));
@@ -1783,7 +1918,7 @@
       }
     });
 
-    state.posts.forEach(post => {
+    posts.forEach(post => {
       // Находим все чистые теги поста (исключая технические из черного списка)
       const cleanTags = post.tags
         .filter(t => !TAGS_BLACKLIST.includes(t.title.toLowerCase()));
@@ -1884,16 +2019,10 @@
       }
       
       // Вычисляем является ли тайтл Новым (добавлен после нашего последнего захода)
-      // Берем первый пост (самый старый) и смотрим время публикации
-      const firstPostTime = title.posts.length > 0 ? title.posts[0].publishTime * 1000 : 0;
-      const isNewTitle = firstPostTime > state.lastVisit;
+      const isNewTitle = Array.isArray(state.newTitles) && state.newTitles.includes(title.name);
       
-      // Проверяем есть ли новые невышедшие главы с последнего захода для отслеживаемых/избранных тайтлов
-      let hasNewChapters = false;
-      if (userTitleData.status === 'watching' || userTitleData.status === 'favorite') {
-        const lastPostTime = title.posts.length > 0 ? title.posts[title.posts.length - 1].publishTime * 1000 : 0;
-        hasNewChapters = lastPostTime > state.lastVisit && readCount < title.posts.length;
-      }
+      // Проверяем есть ли новые главы
+      const hasNewChapters = Array.isArray(state.newChapters) && state.newChapters.includes(title.name);
       
       // Определяем категорию (тир подписки) тайтла на основе подписок его постов
       let category = 'Бесплатные';
@@ -2266,9 +2395,12 @@
       <!-- Вкладки (только в списке) -->
       ${!state.ui.activeTitle ? `
         <div class="lf-tabs">
-          ${state.settings.tabOrder.filter(tabKey => tabKey !== 'completed' && tabKey !== 'dropped').map(tabKey => `
-            <button class="lf-tab-btn ${state.ui.activeTab === tabKey ? 'lf-active' : ''}" data-tab="${tabKey}">${TAB_NAMES[tabKey] || tabKey}</button>
-          `).join('')}
+          ${state.settings.tabOrder.filter(tabKey => tabKey !== 'completed' && tabKey !== 'dropped').map(tabKey => {
+            const isNewTab = tabKey === 'new';
+            const count = isNewTab ? ((state.newTitles ? state.newTitles.length : 0) + (state.newChapters ? state.newChapters.length : 0)) : 0;
+            const badgeHtml = count > 0 ? ` <span class="lf-tab-badge">${count}</span>` : '';
+            return `<button class="lf-tab-btn ${state.ui.activeTab === tabKey ? 'lf-active' : ''}" data-tab="${tabKey}">${TAB_NAMES[tabKey] || tabKey}${badgeHtml}</button>`;
+          }).join('')}
           <div class="lf-dropdown">
             <button id="lf-archive-btn" class="lf-tab-btn lf-dropdown-trigger ${['completed', 'dropped'].includes(state.ui.activeTab) ? 'lf-active' : ''}">
               ${state.ui.activeTab === 'dropped' ? t('tab_dropped') : (state.ui.activeTab === 'completed' ? t('tab_completed') : t('tab_archive'))} <span class="lf-arrow">▼</span>
@@ -2852,16 +2984,26 @@
           chrome.storage.local.clear(() => {
             showNotification(t('notify_data_deleted'));
             
+            // Сбрасываем DevTools в памяти к заводским настройкам
+            if (typeof devSettings !== 'undefined') {
+              devSettings.enabled = false;
+              devSettings.cutoffDate = '';
+              devSettings.hideAboutAuthor = false;
+              applyDevSettingsEffects();
+            }
+
             // Сбрасываем локальное состояние
             state.posts = [];
             state.user_data = {};
             state.lastVisit = 0;
+            state.newTitles = [];
+            state.newChapters = [];
             state.collapsedGroups = {};
             state.blogDescriptionLinks = [];
             state.settings = {
               syncLikes: true,
               autoMarkOpen: false,
-              tabOrder: ['favorite', 'all', 'watching', 'new', 'completed', 'dropped'],
+              tabOrder: ['favorite', 'new', 'watching', 'all', 'completed', 'dropped'],
               zoom: 1.25,
               zoomMigrated: true,
               sidebarOpen: true,
@@ -3390,16 +3532,74 @@
     
     container.innerHTML = '';
     
-    // Если мы на вкладке «Новые», выведем разделение: «Новые тайтлы» и «Новые главы»
+    // Если мы на вкладке «Новые», выведем плоский список
     if (state.ui.activeTab === 'new') {
       const newTitles = filtered.filter(t => t.isNewTitle);
       const newChapters = filtered.filter(t => t.hasNewChapters && !t.isNewTitle);
       
       if (newTitles.length > 0) {
-        renderGroup(container, 'Новые тайтлы (впервые выложены)', newTitles);
+        renderGroup(container, 'Новые тайтлы', newTitles);
       }
       if (newChapters.length > 0) {
-        renderGroup(container, 'Новые главы (в подписках)', newChapters);
+        renderGroup(container, 'Новые главы', newChapters);
+      }
+
+      const hasNew = (state.newTitles && state.newTitles.length > 0) || (state.newChapters && state.newChapters.length > 0);
+      if (hasNew) {
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'lf-new-tab-actions';
+        
+        const clearAllBtn = document.createElement('button');
+        clearAllBtn.id = 'lf-clear-all-new-btn';
+        clearAllBtn.className = 'lf-clear-all-new-btn';
+        clearAllBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M19 4h-3.5l-1-1h-5l-1 1H5v2h14M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12z"/>
+          </svg>
+          ${t('btn_clear_new_short')}
+        `;
+        
+        let confirmTimeout = null;
+        let isConfirmStage = false;
+        
+        const resetConfirmState = () => {
+          isConfirmStage = false;
+          clearAllBtn.classList.remove('lf-confirming');
+          clearAllBtn.innerHTML = `
+            <svg viewBox="0 0 24 24">
+              <path d="M19 4h-3.5l-1-1h-5l-1 1H5v2h14M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12z"/>
+            </svg>
+            ${t('btn_clear_new_short')}
+          `;
+          if (confirmTimeout) {
+            clearTimeout(confirmTimeout);
+            confirmTimeout = null;
+          }
+        };
+
+        clearAllBtn.addEventListener('click', () => {
+          if (!isConfirmStage) {
+            isConfirmStage = true;
+            clearAllBtn.classList.add('lf-confirming');
+            clearAllBtn.innerHTML = `
+              <svg viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+              </svg>
+              ${t('btn_clear_new_short').includes('Очистить') ? 'Точно очистить?' : 'Are you sure?'}
+            `;
+            confirmTimeout = setTimeout(resetConfirmState, 3000);
+          } else {
+            resetConfirmState();
+            state.newTitles = [];
+            state.newChapters = [];
+            const isDevEmulation = typeof devSettings !== 'undefined' && devSettings.enabled && devSettings.cutoffDate;
+            state.lastVisit = isDevEmulation ? new Date(devSettings.cutoffDate).getTime() : Date.now();
+            saveStateToStorage();
+            render();
+          }
+        });
+        actionsDiv.appendChild(clearAllBtn);
+        container.appendChild(actionsDiv);
       }
       return;
     }
@@ -3489,7 +3689,8 @@
     const groupContainer = document.createElement('div');
     const query = state.ui.searchQuery.toLowerCase().trim();
     // При наличии поискового запроса принудительно раскрываем категорию
-    const isCollapsed = query ? false : (state.collapsedGroups[groupName] !== false);
+    const isDefaultExpanded = groupName === 'Новые тайтлы' || groupName === 'Новые главы';
+    const isCollapsed = query ? false : (isDefaultExpanded ? state.collapsedGroups[groupName] === true : state.collapsedGroups[groupName] !== false);
     groupContainer.className = `lf-group-container ${isCollapsed ? 'lf-collapsed' : ''}`;
     
     const header = document.createElement('div');
@@ -3708,18 +3909,41 @@
     parent.appendChild(groupContainer);
   }
 
+  function clearTitleNovelty(titleName) {
+    let changed = false;
+    if (state.newTitles && state.newTitles.includes(titleName)) {
+      state.newTitles = state.newTitles.filter(name => name !== titleName);
+      changed = true;
+    }
+    if (state.newChapters && state.newChapters.includes(titleName)) {
+      state.newChapters = state.newChapters.filter(name => name !== titleName);
+      changed = true;
+    }
+    if (changed) {
+      saveStateToStorage();
+    }
+  }
+
   // Создание строки тайтла
   function createMangaRow(manga) {
     const row = document.createElement('div');
     row.className = 'lf-manga-row';
+    const isNewTab = state.ui.activeTab === 'new';
     
     row.innerHTML = `
       <div class="lf-manga-info">
         <div class="lf-status-dot lf-${manga.statusColor}" title="${getStatusTooltip(manga.statusColor)}"></div>
         <span class="lf-manga-title" title="${escapeHtml(manga.name)}">${escapeHtml(manga.name)}</span>
       </div>
-      <div class="lf-manga-meta">
+      <div class="lf-manga-meta ${isNewTab ? 'lf-has-delete' : ''}">
         <span class="lf-manga-progress">${manga.readCount}/${manga.posts.length}</span>
+        ${isNewTab ? `
+          <button class="lf-manga-delete-new-btn" title="${t('btn_clear_all_new') /* или используем локализацию или кастомную подсказку */}">
+            <svg viewBox="0 0 24 24">
+              <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+            </svg>
+          </button>
+        ` : ''}
       </div>
     `;
     
@@ -3728,8 +3952,20 @@
       if (manga.name === 'Объявления') {
         state.ui.sortAsc = false;
       }
+      clearTitleNovelty(manga.name);
       render();
     });
+
+    if (isNewTab) {
+      const deleteBtn = row.querySelector('.lf-manga-delete-new-btn');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          clearTitleNovelty(manga.name);
+          render();
+        });
+      }
+    }
     
     return row;
   }
@@ -4636,10 +4872,26 @@
       devSettings.cutoffDate = cutoffInput.value;
       devSettings.hideAboutAuthor = hideAboutAuthorCheckbox.checked;
       
+      if (devSettings.enabled && devSettings.cutoffDate) {
+        const cutoffTimeMs = new Date(devSettings.cutoffDate).getTime();
+        if (!state.lastVisit || state.lastVisit > cutoffTimeMs) {
+          state.lastVisit = cutoffTimeMs - 24 * 60 * 60 * 1000;
+        }
+      } else {
+        state.lastVisit = Date.now();
+      }
+      state.newTitles = [];
+      state.newChapters = [];
+      await saveStateToStorage();
+      
       await saveDevSettings();
       applyDevSettingsEffects();
       showNotification('Настройки DevTools сохранены!');
       renderDevSidebarContent();
+      render(); // перерисовать, чтобы обновить списки во вкладках
+      
+      // Автоматически запускаем синхронизацию для применения новых настроек отсечки
+      performIncrementalSync();
     });
 
     devSidebar.querySelector('#lf-dev-crop-btn').addEventListener('click', async () => {

@@ -13,6 +13,9 @@
       close_btn_tooltip: 'Свернуть панель',
       sync_btn_tooltip: 'Синхронизировать новые посты',
       settings_btn_tooltip: 'Настройки',
+      btn_clear_all_new: 'Очистить все новые',
+      btn_clear_new_short: 'Очистить всё',
+      confirm_clear_all_new: 'Вы уверены, что хотите очистить весь список новых тайтлов и глав?',
 
       // Вкладки и категории (Сортировка)
       tab_favorite: 'Избранное',
@@ -180,6 +183,8 @@
       group_fully_finished: 'Полностью озвучено',
       group_announcements: 'Объявления',
       group_new_chapters: 'Новые главы (в подписках)',
+      group_new_titles: 'Новые тайтлы',
+      group_new_chapters_short: 'Новые главы',
 
       // Названия категорий/тиров
       category_free: 'Бесплатные',
@@ -232,6 +237,9 @@
       close_btn_tooltip: 'Collapse panel',
       sync_btn_tooltip: 'Sync new posts',
       settings_btn_tooltip: 'Settings',
+      btn_clear_all_new: 'Clear all new',
+      btn_clear_new_short: 'Clear all',
+      confirm_clear_all_new: 'Are you sure you want to clear the entire list of new titles and chapters?',
 
       // Tabs & Categories (Sorting)
       tab_favorite: 'Favorites',
@@ -399,6 +407,8 @@
       group_fully_finished: 'Fully finished',
       group_announcements: 'Announcements',
       group_new_chapters: 'New chapters (subscribed)',
+      group_new_titles: 'New titles',
+      group_new_chapters_short: 'New chapters',
 
       // Category names / tiers
       category_free: 'Free',
@@ -483,6 +493,8 @@
     'Все': 'category_all',
     'Категория не определена': 'detail_category_undefined',
     'Новые главы (в подписках)': 'group_new_chapters',
+    'Новые тайтлы': 'group_new_titles',
+    'Новые главы': 'group_new_chapters_short',
     'Завершен том': 'group_volume_finished',
     'Полностью озвучено': 'group_fully_finished'
   };

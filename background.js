@@ -4,6 +4,16 @@
  */
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'updateBadge') {
+    const action = chrome.action || chrome.browserAction;
+    if (action) {
+      action.setBadgeText({ text: message.text || '' });
+      action.setBadgeBackgroundColor({ color: '#ff5c12' });
+    }
+    sendResponse({ success: true });
+    return;
+  }
+
   if (message.type === 'WEBDAV_REQUEST') {
     const { url, method, headers, bodyArray } = message;
 

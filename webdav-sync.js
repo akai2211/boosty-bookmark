@@ -144,7 +144,9 @@
       playerTimestamps: mergePlayerTimestamps(local.playerTimestamps, remote.playerTimestamps),
       lastVisit: Math.max(local.lastVisit || 0, remote.lastVisit || 0),
       collapsedGroups: { ...(local.collapsedGroups || {}), ...(remote.collapsedGroups || {}) },
-      blogDescriptionLinks: mergeBlogDescriptionLinks(local.blogDescriptionLinks, remote.blogDescriptionLinks)
+      blogDescriptionLinks: mergeBlogDescriptionLinks(local.blogDescriptionLinks, remote.blogDescriptionLinks),
+      newTitles: [...new Set([...(local.newTitles || []), ...(remote.newTitles || [])])],
+      newChapters: [...new Set([...(local.newChapters || []), ...(remote.newChapters || [])])]
     };
   }
 

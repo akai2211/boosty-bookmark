@@ -93,6 +93,8 @@ describe('WebDAV sync: слияние данных', () => {
           lastVisit: 100,
           collapsedGroups: {},
           blogDescriptionLinks: [],
+          newTitles: ['Тайтл A'],
+          newChapters: ['Тайтл B'],
           posts: [{ id: 'p1', title: 'Глава 1', publishTime: 10, isLiked: false }]
         }
       };
@@ -105,6 +107,8 @@ describe('WebDAV sync: слияние данных', () => {
           lastVisit: 200,
           collapsedGroups: {},
           blogDescriptionLinks: [],
+          newTitles: ['Тайтл C', 'Тайтл A'],
+          newChapters: ['Тайтл D'],
           posts: [{ id: 'p1', title: 'Глава 1', publishTime: 10, isLiked: true }]
         }
       };
@@ -114,6 +118,8 @@ describe('WebDAV sync: слияние данных', () => {
       expect(merged.lightfoxmanga.user_data['Тайтл'].readPosts.sort()).toEqual(['a', 'b']);
       expect(merged.lightfoxmanga.posts).toHaveLength(1);
       expect(merged.lightfoxmanga.posts[0].isLiked).toBe(true);
+      expect(merged.lightfoxmanga.newTitles.sort()).toEqual(['Тайтл A', 'Тайтл C']);
+      expect(merged.lightfoxmanga.newChapters.sort()).toEqual(['Тайтл B', 'Тайтл D']);
       expect(merged.lightfoxmanga.version).toBe('2.0');
     });
   });
