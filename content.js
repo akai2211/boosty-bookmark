@@ -262,6 +262,10 @@
     const isTarget = isTargetPage();
     const btn = document.getElementById('lf-trigger-btn');
     const sidebar = document.getElementById('lf-sidebar');
+    /* DEV_ONLY_START */
+    const devBtn = document.getElementById('lf-dev-trigger-btn');
+    const devSidebar = document.getElementById('lf-dev-sidebar');
+    /* DEV_ONLY_END */
     
     if (isTarget) {
       checkAndScrollToFeed();
@@ -271,6 +275,9 @@
         // Создаем элементы интерфейса
         createSidebar();
         createTriggerButton();
+        /* DEV_ONLY_START */
+        initDevTools();
+        /* DEV_ONLY_END */
         
         // Запускаем фоновую синхронизацию (проверка новых постов)
         if (state.posts.length > 0) {
@@ -287,6 +294,10 @@
         // Если интерфейс уже есть, просто показываем его
         btn.style.display = '';
         sidebar.style.display = '';
+        /* DEV_ONLY_START */
+        if (devBtn) devBtn.style.display = devSidebarOpen ? 'none' : '';
+        if (devSidebar) devSidebar.style.display = '';
+        /* DEV_ONLY_END */
       }
     } else {
       // Скрываем интерфейс, если мы ушли на другую страницу
@@ -299,6 +310,14 @@
           saveStateToStorage();
         }
       }
+      /* DEV_ONLY_START */
+      if (devBtn) devBtn.style.display = 'none';
+      if (devSidebar) {
+        devSidebar.style.display = 'none';
+        devSidebar.classList.remove('lf-open');
+        devSidebarOpen = false;
+      }
+      /* DEV_ONLY_END */
     }
   }
 
@@ -411,6 +430,9 @@
   async function init() {
     await loadStateFromStorage();
     await loadWebDavConfig();
+    /* DEV_ONLY_START */
+    await loadDevSettings();
+    /* DEV_ONLY_END */
 
     // Восстанавливаем активный тайтл и вкладку из sessionStorage (для сохранения состояния текущей вкладки при перезагрузке)
     try {
@@ -1488,6 +1510,14 @@
         }
 
         for (const p of pagePosts) {
+          /* DEV_ONLY_START */
+          if (typeof devSettings !== 'undefined' && devSettings.enabled && devSettings.cutoffDate) {
+            const cutoffTime = new Date(devSettings.cutoffDate).getTime() / 1000;
+            if (p.publishTime > cutoffTime) {
+              continue;
+            }
+          }
+          /* DEV_ONLY_END */
           const fresh = {
             id: p.id,
             title: p.title || 'Без названия',
@@ -1587,8 +1617,16 @@
         const result = await response.json();
         const pagePosts = result.data || [];
         
+        let filteredPagePosts = pagePosts;
+        /* DEV_ONLY_START */
+        if (typeof devSettings !== 'undefined' && devSettings.enabled && devSettings.cutoffDate) {
+          const cutoffTime = new Date(devSettings.cutoffDate).getTime() / 1000;
+          filteredPagePosts = pagePosts.filter(p => p.publishTime <= cutoffTime);
+        }
+        /* DEV_ONLY_END */
+        
         // Преобразуем посты в компактный формат для хранения
-        const processed = pagePosts.map(p => ({
+        const processed = filteredPagePosts.map(p => ({
           id: p.id,
           title: p.title || 'Без названия',
           publishTime: p.publishTime,
@@ -1649,10 +1687,18 @@
       const pagePosts = result.data || [];
       if (!pagePosts.length) return;
       
+      let filteredPagePosts = pagePosts;
+      /* DEV_ONLY_START */
+      if (typeof devSettings !== 'undefined' && devSettings.enabled && devSettings.cutoffDate) {
+        const cutoffTime = new Date(devSettings.cutoffDate).getTime() / 1000;
+        filteredPagePosts = pagePosts.filter(p => p.publishTime <= cutoffTime);
+      }
+      /* DEV_ONLY_END */
+      
       let hasUpdates = false;
       const postMap = new Map(state.posts.map(p => [p.id, p]));
       
-      for (const p of pagePosts) {
+      for (const p of filteredPagePosts) {
         const existing = postMap.get(p.id);
         
         // Обрабатываем свежие данные поста
@@ -4352,6 +4398,206 @@
     ];
     return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
   }
+
+  /* DEV_ONLY_START */
+  let devSettings = {
+    enabled: false,
+    cutoffDate: '',
+    hideAboutAuthor: false
+  };
+
+  function loadDevSettings() {
+    return new Promise((resolve) => {
+      if (!isExtensionContextValid()) { resolve(); return; }
+      try {
+        chrome.storage.local.get(['lf_dev_settings'], (res) => {
+          if (chrome.runtime.lastError) { resolve(); return; }
+          const saved = res['lf_dev_settings'] || {};
+          devSettings.enabled = !!saved.enabled;
+          devSettings.cutoffDate = saved.cutoffDate || '';
+          devSettings.hideAboutAuthor = !!saved.hideAboutAuthor;
+          resolve();
+        });
+      } catch (e) {
+        resolve();
+      }
+    });
+  }
+
+  function saveDevSettings() {
+    return new Promise((resolve) => {
+      if (!isExtensionContextValid()) { resolve(); return; }
+      try {
+        chrome.storage.local.set({ 'lf_dev_settings': devSettings }, () => {
+          resolve();
+        });
+      } catch (e) {
+        resolve();
+      }
+    });
+  }
+
+  let devSidebarOpen = false;
+
+  function applyDevSettingsEffects() {
+    if (devSettings.hideAboutAuthor) {
+      document.body.classList.add('lf-dev-hide-about-author');
+    } else {
+      document.body.classList.remove('lf-dev-hide-about-author');
+    }
+  }
+
+  function initDevTools() {
+    createDevTriggerButton();
+    createDevSidebar();
+    applyDevSettingsEffects();
+  }
+
+  function createDevTriggerButton() {
+    if (document.getElementById('lf-dev-trigger-btn')) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'lf-dev-trigger-btn';
+    btn.title = 'DevTools - Панель разработчика';
+    btn.innerHTML = '🛠️';
+
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      devSidebarOpen = !devSidebarOpen;
+      const devSidebar = document.getElementById('lf-dev-sidebar');
+      if (devSidebar) {
+        if (devSidebarOpen) {
+          devSidebar.classList.add('lf-open');
+          btn.style.display = 'none';
+          renderDevSidebarContent();
+        } else {
+          devSidebar.classList.remove('lf-open');
+        }
+      }
+    });
+
+    document.body.appendChild(btn);
+  }
+
+  function createDevSidebar() {
+    if (document.getElementById('lf-dev-sidebar')) return;
+
+    const devSidebar = document.createElement('div');
+    devSidebar.id = 'lf-dev-sidebar';
+    devSidebar.className = 'lf-dark';
+
+    devSidebar.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+
+    document.body.appendChild(devSidebar);
+    if (devSidebarOpen) {
+      renderDevSidebarContent();
+    }
+  }
+
+  function renderDevSidebarContent() {
+    const devSidebar = document.getElementById('lf-dev-sidebar');
+    if (!devSidebar) return;
+
+    const totalPosts = state.posts.length;
+    let newestPostDate = 'Нет постов';
+    if (totalPosts > 0) {
+      const ts = state.posts[0].publishTime;
+      newestPostDate = formatSyncDate(ts * 1000);
+    }
+
+    devSidebar.innerHTML = `
+      <div class="lf-dev-header">
+        <h3>Boosty Bookmark DevTools</h3>
+        <span class="lf-dev-close">×</span>
+      </div>
+      <div class="lf-dev-body">
+        <div class="lf-dev-section">
+          <h4>📊 Статистика</h4>
+          <p>Постов в базе: <strong>${totalPosts}</strong></p>
+          <p>Последний пост: <small>${newestPostDate}</small></p>
+        </div>
+        
+        <div class="lf-dev-section">
+          <h4>📅 Эмуляция даты канала</h4>
+          <div class="lf-dev-row">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="lf-dev-enabled" ${devSettings.enabled ? 'checked' : ''}>
+              Включить эмуляцию
+            </label>
+          </div>
+          <div class="lf-dev-row">
+            <label style="display: block; margin-bottom: 4px;">Дата отсечки:</label>
+            <input type="date" id="lf-dev-cutoff-date" style="width: 100%; padding: 6px; box-sizing: border-box; background-color: #2a2a2a; color: #ffffff; border: 1px solid #444; border-radius: 4px; color-scheme: dark;" value="${devSettings.cutoffDate || ''}">
+          </div>
+          <div class="lf-dev-row" style="margin-top: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="lf-dev-hide-about-author" ${devSettings.hideAboutAuthor ? 'checked' : ''}>
+              Скрыть блок «Об авторе»
+            </label>
+          </div>
+          <button id="lf-dev-save-btn" class="lf-dev-btn">Сохранить настройки</button>
+        </div>
+
+        <div class="lf-dev-section">
+          <h4>✂️ Очистка базы данных</h4>
+          <button id="lf-dev-crop-btn" class="lf-dev-btn lf-dev-btn-danger">Обрезать посты новее даты</button>
+          <p class="lf-dev-help">Удаляет из локальной базы все посты, которые были опубликованы позже выбранной даты отсечки.</p>
+        </div>
+      </div>
+    `;
+
+    devSidebar.querySelector('.lf-dev-close').addEventListener('click', () => {
+      devSidebarOpen = false;
+      devSidebar.classList.remove('lf-open');
+      const devBtn = document.getElementById('lf-dev-trigger-btn');
+      if (devBtn) {
+        devBtn.style.display = '';
+      }
+    });
+
+    devSidebar.querySelector('#lf-dev-save-btn').addEventListener('click', async () => {
+      const enabledCheckbox = document.getElementById('lf-dev-enabled');
+      const cutoffInput = document.getElementById('lf-dev-cutoff-date');
+      const hideAboutAuthorCheckbox = document.getElementById('lf-dev-hide-about-author');
+      
+      devSettings.enabled = enabledCheckbox.checked;
+      devSettings.cutoffDate = cutoffInput.value;
+      devSettings.hideAboutAuthor = hideAboutAuthorCheckbox.checked;
+      
+      await saveDevSettings();
+      applyDevSettingsEffects();
+      showNotification('Настройки DevTools сохранены!');
+      renderDevSidebarContent();
+    });
+
+    devSidebar.querySelector('#lf-dev-crop-btn').addEventListener('click', async () => {
+      const cutoffInput = document.getElementById('lf-dev-cutoff-date');
+      const dateVal = cutoffInput.value;
+      if (!dateVal) {
+        showNotification('Укажите дату отсечки!');
+        return;
+      }
+
+      if (!confirm(`Вы уверены, что хотите удалить все локальные посты новее ${dateVal}?`)) {
+        return;
+      }
+
+      const cutoffTime = new Date(dateVal).getTime() / 1000;
+      const originalCount = state.posts.length;
+      state.posts = state.posts.filter(p => p.publishTime <= cutoffTime);
+      const deletedCount = originalCount - state.posts.length;
+
+      state.collapsedGroups = {};
+      
+      await saveStateToStorage();
+      render();
+      renderDevSidebarContent();
+      showNotification(`Успешно удалено ${deletedCount} постов!`);
+    });
+  }
+  /* DEV_ONLY_END */
 
   // Запуск
   if (document.readyState === 'loading') {

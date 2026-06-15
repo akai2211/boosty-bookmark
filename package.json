@@ -6,7 +6,8 @@
   "scripts": {
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
-    "test": "npm run test:unit && npm run test:e2e"
+    "test": "npm run test:unit && npm run test:e2e",
+    "build": "node build.js"
   },
   "repository": {
     "type": "git",
@@ -21,6 +22,7 @@
   "homepage": "https://github.com/akai2211/boosty-bookmark#readme",
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "archiver": "^8.0.0",
     "jsdom": "^29.1.1",
     "vitest": "^4.1.8"
   }
