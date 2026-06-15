@@ -92,6 +92,9 @@
       settings_beta_warning_text: 'Данная функция находится в бета-тестировании, работает не везде и может функционировать некорректно в некоторых тайтлах.',
       settings_save_player_label: 'Запоминать время видео и аудио',
       settings_save_player_desc: 'Автоматически восстанавливать прогресс воспроизведения медиаплееров Boosty.',
+      settings_force_video_quality_label: 'Принудительное качество видео',
+      settings_force_video_quality_desc: 'Запоминать и принудительно устанавливать качество видео в плеере.',
+      settings_video_quality_label: 'Предпочитаемое качество',
       settings_auto_mark_label: 'Автоотметка при открытии',
       settings_auto_mark_desc: 'Автоматически помечать главу как просмотренную при переходе по ссылке.',
 
@@ -121,6 +124,9 @@
       notify_zoom_changed: 'Масштаб изменен на {0}%',
       notify_data_deleted: 'Все данные успешно удалены',
       notify_title_moved: 'Тайтлы перенесен в раздел «{0}»',
+      notify_force_video_quality_on: 'Принудительное качество видео включено',
+      notify_force_video_quality_off: 'Принудительное качество видео отключено',
+      notify_video_quality_changed: 'Предпочитаемое качество изменено на {0}',
 
       // Детальный вид тайтла
       detail_back_btn: 'Назад к списку',
@@ -298,6 +304,9 @@
       settings_beta_warning_text: 'This feature is in beta, does not work everywhere, and may function incorrectly in some titles.',
       settings_save_player_label: 'Remember audio & video time',
       settings_save_player_desc: 'Automatically restore playback progress in Boosty media players.',
+      settings_force_video_quality_label: 'Force Video Quality',
+      settings_force_video_quality_desc: 'Remember and force set video quality in the player.',
+      settings_video_quality_label: 'Preferred Quality',
       settings_auto_mark_label: 'Auto-mark on open',
       settings_auto_mark_desc: 'Automatically mark a chapter as read when you navigate to its link.',
 
@@ -327,6 +336,9 @@
       notify_zoom_changed: 'Scale changed to {0}%',
       notify_data_deleted: 'All data has been successfully deleted',
       notify_title_moved: 'Title moved to "{0}"',
+      notify_force_video_quality_on: 'Force video quality enabled',
+      notify_force_video_quality_off: 'Force video quality disabled',
+      notify_video_quality_changed: 'Preferred quality changed to {0}',
 
       // Detailed Title View
       detail_back_btn: 'Back to list',

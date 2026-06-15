@@ -105,6 +105,8 @@
       syncLikes: true,   // Учитывать лайки как просмотренное
       autoMarkOpen: false, // Автоматически помечать главу как прочитанную при открытии
       savePlayerTime: true, // Сохранять и восстанавливать время видео/аудио
+      forceVideoQuality: false, // Принудительное качество видео
+      videoQuality: '1080p', // Предпочитаемое качество видео по умолчанию
       tabOrder: ['favorite', 'all', 'watching', 'new', 'completed', 'dropped'],
       zoom: 1.25,         // Коэффициент масштаба боковой панели (соответствует 100% в UI)
       zoomMigrated: true, // Флаг выполненной миграции масштаба
@@ -534,6 +536,7 @@
           state.playerTimestamps = saved.playerTimestamps || {};
           if (saved.settings) {
             state.settings = { ...state.settings, ...saved.settings };
+            state.settings.forceVideoQuality = false; // Временно заморожено (не работает)
             // Миграция openTagsInCurrentTab -> openTitlesInCurrentTab
             if (saved.settings.openTagsInCurrentTab !== undefined && saved.settings.openTitlesInCurrentTab === undefined) {
               state.settings.openTitlesInCurrentTab = saved.settings.openTagsInCurrentTab;
@@ -1759,6 +1762,28 @@
             state.user_data[titleName].updatedAt = Date.now();
             delete state.user_data[defaultName];
             hasMigration = true;
+          } else {
+            // Если существуют оба ключа, сливаем их на основе таймстампов
+            const oldData = state.user_data[defaultName];
+            const newData = state.user_data[titleName];
+            
+            const oldTime = oldData.updatedAt || 0;
+            const newTime = newData.updatedAt || 0;
+            
+            const mergedReadPosts = [...new Set([...(oldData.readPosts || []), ...(newData.readPosts || [])])];
+            const mergedStatus = newTime >= oldTime ? newData.status : oldData.status;
+            const mergedNotes = newTime >= oldTime ? (newData.notes || '') : (oldData.notes || '');
+            const mergedUpdatedAt = Math.max(oldTime, newTime);
+            
+            state.user_data[titleName] = {
+              status: mergedStatus,
+              notes: mergedNotes,
+              readPosts: mergedReadPosts,
+              updatedAt: mergedUpdatedAt
+            };
+            
+            delete state.user_data[defaultName];
+            hasMigration = true;
           }
         }
 
@@ -1897,19 +1922,17 @@
       if (isFullyFinished && readCount === title.posts.length && title.posts.length > 0 && (currentStatus === 'none' || currentStatus === 'watching')) {
         currentStatus = 'completed';
         if (!state.user_data[title.name]) {
-          state.user_data[title.name] = { status: 'completed', notes: '', readPosts: [], updatedAt: Date.now() };
+          state.user_data[title.name] = { status: 'completed', notes: '', readPosts: [], updatedAt: 0 };
         } else {
           state.user_data[title.name].status = 'completed';
-          state.user_data[title.name].updatedAt = Date.now();
         }
         hasMigration = true;
       } else if (currentStatus === 'none' && readCount > 1) {
         currentStatus = 'watching';
         if (!state.user_data[title.name]) {
-          state.user_data[title.name] = { status: 'watching', notes: '', readPosts: [], updatedAt: Date.now() };
+          state.user_data[title.name] = { status: 'watching', notes: '', readPosts: [], updatedAt: 0 };
         } else {
           state.user_data[title.name].status = 'watching';
-          state.user_data[title.name].updatedAt = Date.now();
         }
         hasMigration = true;
       }
@@ -2530,6 +2553,33 @@
             <input type="checkbox" id="lf-setting-save-player" class="lf-settings-checkbox" ${state.settings.savePlayerTime ? 'checked' : ''}>
           </div>
 
+          <!-- Временно заморожено: функция не работает из-за изменений на стороне Boosty/VK -->
+          <div style="display: none;">
+            <div class="lf-settings-row">
+              <label class="lf-settings-label" for="lf-setting-force-video-quality">
+                ${t('settings_force_video_quality_label')}
+                <div class="lf-settings-desc">${t('settings_force_video_quality_desc')}</div>
+              </label>
+              <input type="checkbox" id="lf-setting-force-video-quality" class="lf-settings-checkbox" ${state.settings.forceVideoQuality ? 'checked' : ''}>
+            </div>
+
+            <div class="lf-settings-row" id="lf-setting-video-quality-container" style="${state.settings.forceVideoQuality ? '' : 'opacity: 0.5; pointer-events: none;'}">
+              <label class="lf-settings-label" for="lf-setting-video-quality">
+                ${t('settings_video_quality_label')}
+              </label>
+              <select id="lf-setting-video-quality" class="lf-settings-select" ${state.settings.forceVideoQuality ? '' : 'disabled'}>
+                <option value="2160p" ${state.settings.videoQuality === '2160p' ? 'selected' : ''}>2160p</option>
+                <option value="1440p" ${state.settings.videoQuality === '1440p' ? 'selected' : ''}>1440p</option>
+                <option value="1080p" ${state.settings.videoQuality === '1080p' ? 'selected' : ''}>1080p</option>
+                <option value="720p" ${state.settings.videoQuality === '720p' ? 'selected' : ''}>720p</option>
+                <option value="480p" ${state.settings.videoQuality === '480p' ? 'selected' : ''}>480p</option>
+                <option value="360p" ${state.settings.videoQuality === '360p' ? 'selected' : ''}>360p</option>
+                <option value="240p" ${state.settings.videoQuality === '240p' ? 'selected' : ''}>240p</option>
+                <option value="144p" ${state.settings.videoQuality === '144p' ? 'selected' : ''}>144p</option>
+              </select>
+            </div>
+          </div>
+
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-auto-mark">
               ${t('settings_auto_mark_label')}
@@ -2769,7 +2819,9 @@
               zoomMigrated: true,
               sidebarOpen: true,
               openTitlesInCurrentTab: true,
-              openChaptersInFeed: false
+              openChaptersInFeed: false,
+              forceVideoQuality: false,
+              videoQuality: '1080p'
             };
             
             // Сбрасываем временные UI-параметры
@@ -2836,6 +2888,36 @@
       savePlayerCheckbox.addEventListener('change', (e) => {
         state.settings.savePlayerTime = e.target.checked;
         saveStateToStorage();
+      });
+    }
+
+    const forceVideoQualityCheckbox = document.getElementById('lf-setting-force-video-quality');
+    const videoQualitySelect = document.getElementById('lf-setting-video-quality');
+    const videoQualityContainer = document.getElementById('lf-setting-video-quality-container');
+
+    if (forceVideoQualityCheckbox) {
+      forceVideoQualityCheckbox.addEventListener('change', (e) => {
+        const checked = e.target.checked;
+        state.settings.forceVideoQuality = checked;
+        saveStateToStorage();
+        showNotification(checked ? t('notify_force_video_quality_on') : t('notify_force_video_quality_off'));
+        
+        if (videoQualitySelect) {
+          videoQualitySelect.disabled = !checked;
+        }
+        if (videoQualityContainer) {
+          videoQualityContainer.style.opacity = checked ? '1' : '0.5';
+          videoQualityContainer.style.pointerEvents = checked ? 'auto' : 'none';
+        }
+      });
+    }
+
+    if (videoQualitySelect) {
+      videoQualitySelect.addEventListener('change', (e) => {
+        const val = e.target.value;
+        state.settings.videoQuality = val;
+        saveStateToStorage();
+        showNotification(t('notify_video_quality_changed', val));
       });
     }
 
@@ -4095,21 +4177,153 @@
     }, 1000);
   }
 
-  // Поиск новых плееров на странице
-  function initPlayerTracking() {
-    if (!state.settings.savePlayerTime) return;
+  /**
+   * Выбирает нужное разрешение из списка li.item-quality внутри playerWrapper.
+   * @param {HTMLElement} playerWrapper - Обертка плеера (.player-wrapper) из Shadow DOM
+   * @param {string} targetQuality - Целевое качество (например, "1080p")
+   * @returns {boolean} true если качество успешно установлено
+   */
+  function selectQualityOption(playerWrapper, targetQuality) {
+    const itemQualities = playerWrapper.querySelectorAll('li.item-quality');
+    
+    if (itemQualities.length === 0) {
+      return false;
+    }
 
-    const mediaPlayers = document.querySelectorAll('audio, video');
-    mediaPlayers.forEach(player => {
-      if (!player.dataset.lfTracked) {
-        player.dataset.lfTracked = 'true';
-        trackPlayerProgress(player);
+    // Ищем элемент с нужным качеством и кликаем по нему
+    for (const qualityEl of itemQualities) {
+      if (qualityEl.dataset.value === targetQuality) {
+        console.info(`[Boosty Bookmark] Установлено качество: ${targetQuality}`);
+        qualityEl.click();
+        return true;
+      }
+    }
+
+    // Если точное совпадение не найдено, выбираем первый доступный вариант (обычно максимальный)
+    const fallbackEl = itemQualities[0];
+    console.info(`[Boosty Bookmark] Качество ${targetQuality} недоступно. Выбрано: ${fallbackEl.dataset.value}`);
+    fallbackEl.click();
+    return true;
+  }
+
+  /**
+   * Находит пункт меню «Качество» в настройках плеера и кликает по нему,
+   * чтобы открыть подменю с вариантами разрешения.
+   * В новом VK-плеере меню двухуровневое:
+   *   1) li.item с текстом «Качество» / «Quality» → клик открывает подменю
+   *   2) li.item-quality[data-value="1080p"] → непосредственный выбор качества
+   * @param {HTMLElement} playerWrapper - Обертка плеера (.player-wrapper) из Shadow DOM
+   * @returns {boolean} true если пункт «Качество» найден и кликнут
+   */
+  function openQualitySubmenu(playerWrapper) {
+    const allItems = playerWrapper.querySelectorAll('li.item');
+    for (const item of allItems) {
+      const text = (item.innerText || '').toLowerCase();
+      if (text.includes('качество') || text.includes('quality')) {
+        item.click();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Принудительно устанавливает качество видео: открывает подменю → выбирает разрешение.
+   * Поддерживает как старый формат VK-плеера (li.item-quality сразу в DOM),
+   * так и новый двухуровневый (li.item «Качество» → подменю li.item-quality).
+   * @param {HTMLElement} playerWrapper - Обертка плеера (.player-wrapper) из Shadow DOM
+   * @param {string} targetQuality - Целевое качество (например, "1080p")
+   */
+  function forceVideoQuality(playerWrapper, targetQuality) {
+    // Попытка 1: Старый формат — li.item-quality уже в DOM (как в старом VK-плеере)
+    if (selectQualityOption(playerWrapper, targetQuality)) {
+      return;
+    }
+
+    // Попытка 2: Новый формат — нужно открыть подменю «Качество»
+    if (!openQualitySubmenu(playerWrapper)) {
+      console.warn('[Boosty Bookmark] Пункт меню «Качество» не найден в настройках плеера.');
+      return;
+    }
+
+    // Ждём появления li.item-quality после открытия подменю
+    let attempts = 0;
+    const maxAttempts = 30; // 3 секунды (30 × 100мс)
+    const interval = setInterval(() => {
+      attempts++;
+      if (selectQualityOption(playerWrapper, targetQuality)) {
+        clearInterval(interval);
+      } else if (attempts >= maxAttempts) {
+        console.warn('[Boosty Bookmark] Качество не установлено: элементы li.item-quality не появились после открытия подменю.');
+        clearInterval(interval);
+      }
+    }, 100);
+  }
+
+  /**
+   * Инициализирует слежение за плеером и вешает триггер на клик
+   * @param {HTMLElement} shadowRootContainer - Контейнер .shadow-root-container веб-компонента
+   * @param {string} targetQuality - Целевое качество видео
+   */
+  function setupVideoPlayerQuality(shadowRootContainer, targetQuality) {
+    const shadowRoot = shadowRootContainer.shadowRoot;
+    if (!shadowRoot) {
+      console.warn('[Boosty Bookmark] shadowRoot не найден в контейнере плеера.');
+      return;
+    }
+
+    const attachClickListener = () => {
+      const playerWrapper = shadowRoot.querySelector('div.player-wrapper');
+      const clickTarget = shadowRoot.querySelector('div.player-wrapper div.container');
+
+      if (!playerWrapper || !clickTarget) {
+        return false;
+      }
+
+      // Вешаем однократный клик — при первом клике пользователя запускаем установку качества
+      clickTarget.addEventListener('click', () => {
+        // Даём плееру время инициализировать меню настроек после старта воспроизведения
+        setTimeout(() => {
+          forceVideoQuality(playerWrapper, targetQuality);
+        }, 300);
+      }, { once: true });
+
+      shadowRootContainer.dataset.lfQualityInjected = 'true';
+      return true;
+    };
+
+    // Пробуем подключиться сразу
+    if (attachClickListener()) return;
+
+    // Если элементы еще не отрендерились внутри shadowRoot, следим за изменениями
+    const observer = new MutationObserver((mutations, obs) => {
+      if (attachClickListener()) {
+        obs.disconnect();
       }
     });
 
+    observer.observe(shadowRoot, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  // Поиск новых плееров на странице
+  function initPlayerTracking() {
+    if (state.settings.savePlayerTime) {
+      const mediaPlayers = document.querySelectorAll('audio, video');
+      mediaPlayers.forEach(player => {
+        if (!player.dataset.lfTracked) {
+          player.dataset.lfTracked = 'true';
+          trackPlayerProgress(player);
+        }
+      });
+    }
+
     const vkPlayerContainers = document.querySelectorAll('vk-video-player .shadow-root-container');
     vkPlayerContainers.forEach(container => {
-      if (!container.dataset.lfTracked) {
+      // Инициализация сохранения прогресса для видео
+      if (state.settings.savePlayerTime && !container.dataset.lfTracked) {
         if (container.shadowRoot) {
           const shadowVideo = container.shadowRoot.querySelector('video');
           if (shadowVideo) {
@@ -4118,6 +4332,12 @@
             trackPlayerProgress(shadowVideo);
           }
         }
+      }
+
+      // Инициализация принудительного качества видео
+      if (state.settings.forceVideoQuality && container.dataset.lfQualityInjected !== 'true') {
+        const targetQuality = state.settings.videoQuality || '1080p';
+        setupVideoPlayerQuality(container, targetQuality);
       }
     });
   }

@@ -55,6 +55,20 @@ describe('WebDAV sync: слияние данных', () => {
       expect(merged['Тайтл Б'].status).toBe('watching');
       expect(merged['Тайтл Б'].notes).toBe('Локальная');
     });
+
+    it('сценарий Акая: локальный статус favorite c новой заметкой и свежим таймстампом побеждает удаленный статус favorite со старой заметкой', () => {
+      const local = {
+        'Тайтл А': { status: 'favorite', notes: 'пример 2', readPosts: [], updatedAt: 200 }
+      };
+      const remote = {
+        'Тайтл А': { status: 'favorite', notes: 'пример 1', readPosts: [], updatedAt: 100 }
+      };
+
+      const merged = sync.mergeUserData(local, remote);
+      expect(merged['Тайтл А'].status).toBe('favorite');
+      expect(merged['Тайтл А'].notes).toBe('пример 2');
+      expect(merged['Тайтл А'].updatedAt).toBe(200);
+    });
   });
 
   describe('mergePosts', () => {

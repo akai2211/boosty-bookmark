@@ -110,5 +110,54 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
       expect(reincarnation).toBeDefined();
       expect(reincarnation.status).toBe('completed');
     });
+
+    it('должен устанавливать updatedAt = 0 при автоматическом присвоении статуса и не менять его, если запись существовала', () => {
+      content.state.posts = [
+        { id: 'post-1', title: 'Реинкарнация Глава 1', publishTime: 100, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: true },
+        { id: 'post-2', title: 'Реинкарнация Глава 2', publishTime: 105, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: true }
+      ];
+
+      // Случай 1: записи нет в user_data, она создается автоматически
+      content.getGroupedTitles();
+      expect(content.state.user_data['Реинкарнация']).toBeDefined();
+      expect(content.state.user_data['Реинкарнация'].status).toBe('watching');
+      expect(content.state.user_data['Реинкарнация'].updatedAt).toBe(0);
+
+      // Случай 2: запись существовала с определенным updatedAt, статус меняется автоматически (например, на completed)
+      content.state.user_data['Реинкарнация'] = { status: 'watching', notes: '', readPosts: [], updatedAt: 12345 };
+      content.state.posts.push(
+        { id: 'post-3', title: 'Реинкарнация Глава 3 — Конец', publishTime: 110, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: true }
+      );
+      
+      content.getGroupedTitles();
+      expect(content.state.user_data['Реинкарнация'].status).toBe('completed');
+      expect(content.state.user_data['Реинкарнация'].updatedAt).toBe(12345); // updatedAt не изменился!
+    });
+
+    it('должен сливать дублирующиеся ключи (defaultName и titleName) при миграции на основе таймстампов', () => {
+      // Имитируем красивое имя
+      content.state.blogDescriptionLinks = [
+        { url: 'https://boosty.to/slug/posts?postsTagsIds=tag-1', title: 'Реинкарнация бездельника' }
+      ];
+
+      // Два поста с одним и тем же тегом
+      content.state.posts = [
+        { id: 'post-1', title: 'Реинкарнация Глава 1', publishTime: 100, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: true }
+      ];
+
+      // В user_data лежат оба ключа: старый (Реинкарнация) с более старым таймстампом, новый (Реинкарнация бездельника) с более новым
+      content.state.user_data['Реинкарнация'] = { status: 'favorite', notes: 'пример 1', readPosts: ['post-1'], updatedAt: 100 };
+      content.state.user_data['Реинкарнация бездельника'] = { status: 'favorite', notes: 'пример 2', readPosts: ['post-1'], updatedAt: 200 };
+
+      content.getGroupedTitles();
+
+      // Старый ключ должен быть удален
+      expect(content.state.user_data['Реинкарнация']).toBeUndefined();
+      
+      // Новый ключ должен содержать заметку с более свежим таймстампом
+      expect(content.state.user_data['Реинкарнация бездельника']).toBeDefined();
+      expect(content.state.user_data['Реинкарнация бездельника'].notes).toBe('пример 2');
+      expect(content.state.user_data['Реинкарнация бездельника'].updatedAt).toBe(200);
+    });
   });
 });
