@@ -428,8 +428,25 @@
     }
   };
 
+  function getCurrentLang() {
+    if (typeof document !== 'undefined') {
+      if (typeof document.cookie === 'string') {
+        const match = document.cookie.match(/(?:^|; )locale=([^;]*)/);
+        if (match) {
+          const locale = match[1].toLowerCase();
+          if (locale.startsWith('en')) return 'en';
+          if (locale.startsWith('ru')) return 'ru';
+        }
+      }
+      if (document.documentElement && document.documentElement.lang) {
+        return document.documentElement.lang.toLowerCase().startsWith('en') ? 'en' : 'ru';
+      }
+    }
+    return 'ru';
+  }
+
   function t(key, ...args) {
-    const lang = (document.documentElement.lang || '').startsWith('en') ? 'en' : 'ru';
+    const lang = getCurrentLang();
     let text = locales[lang]?.[key] || locales['ru']?.[key] || key;
     if (args.length > 0) {
       args.forEach((arg, idx) => {
@@ -465,4 +482,5 @@
   global.locales = locales;
   global.t = t;
   global.tCategory = tCategory;
+  global.getCurrentLang = getCurrentLang;
 })(typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : global);

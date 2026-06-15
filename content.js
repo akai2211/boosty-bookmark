@@ -879,7 +879,8 @@
   function formatSyncDate(timestamp) {
     if (!timestamp) return t('settings_webdav_never_sync');
     const date = new Date(timestamp);
-    const dateLocale = (document.documentElement.lang || '').startsWith('en') ? 'en-US' : 'ru-RU';
+    const isEn = (typeof getCurrentLang === 'function' ? getCurrentLang() : 'ru') === 'en';
+    const dateLocale = isEn ? 'en-US' : 'ru-RU';
     return date.toLocaleString(dateLocale, {
       day: 'numeric',
       month: 'short',
