@@ -159,14 +159,21 @@
 
       // Экран "О расширении"
       about_back_btn: 'Назад к настройкам',
-      about_desc: 'Удобная библиотека для отслеживания прогресса озвучек и других постов на Boosty. Позволяет структурировать публикации по произведениям, отмечать прочитанные главы и сохранять личные заметки (временно адаптировано только под автора <em>lightfoxmanga</em>).',
+      about_desc: 'Удобная библиотека для отслеживания прогресса озвучек и других постов на Boosty. Позволяет структурировать публикации по произведениям, отмечать прочитанные главы и сохранять личные заметки (временно адаптировано только под автора <a href="https://boosty.to/lightfoxmanga" target="_blank" class="lf-link">Light Fox</a>).',
       about_author: 'Автор и разработчик: ',
       about_license: 'Лицензия: ',
       about_privacy: 'Конфиденциальность: ',
-      about_privacy_desc: 'Данные хранятся локально',
+      about_privacy_desc: 'Локально или WebDAV',
+      about_disclaimer: 'Не является официальным расширением Boosty',
       about_github: 'GitHub Репозиторий',
       about_feedback: 'Связаться с автором / Предложить идею',
       about_support: 'Поддержать проект',
+      about_support_boosty: 'Boosty (Подписка и Новости)',
+      about_support_yoomoney: 'ЮMoney',
+      about_support_donationalerts: 'DonationAlerts',
+      about_support_ton: 'TON',
+      about_support_usdt: 'USDT (TRC-20)',
+      about_support_copied: 'Адрес скопирован! ✓',
 
       // Группа "Завершен том" в Смотрю
       group_volume_finished: 'Завершен том',
@@ -371,14 +378,21 @@
 
       // "About" Screen
       about_back_btn: 'Back to settings',
-      about_desc: 'A convenient library for tracking progress of voice acting and other posts on Boosty. It organizes publications by titles, tracks read chapters, and saves personal notes (temporarily adapted only for lightfoxmanga).',
+      about_desc: 'A convenient library for tracking progress of voice acting and other posts on Boosty. It organizes publications by titles, tracks read chapters, and saves personal notes (temporarily adapted only for the author <a href="https://boosty.to/lightfoxmanga" target="_blank" class="lf-link">Light Fox</a>).',
       about_author: 'Author and Developer: ',
       about_license: 'License: ',
       about_privacy: 'Privacy: ',
-      about_privacy_desc: 'Data is stored locally',
+      about_privacy_desc: 'Locally or WebDAV',
+      about_disclaimer: 'Not an official Boosty extension',
       about_github: 'GitHub Repository',
       about_feedback: 'Contact Author / Suggest an Idea',
       about_support: 'Support Project',
+      about_support_boosty: 'Boosty (Subscribe & News)',
+      about_support_yoomoney: 'YooMoney',
+      about_support_donationalerts: 'DonationAlerts',
+      about_support_ton: 'TON',
+      about_support_usdt: 'USDT (TRC-20)',
+      about_support_copied: 'Address copied! ✓',
 
       // Group "Volume finished" in Watching
       group_volume_finished: 'Volume finished',

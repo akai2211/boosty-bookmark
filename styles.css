@@ -1359,6 +1359,106 @@
 }
 
 
+
+/* Блок поддержки проекта (Донаты) */
+.lf-support-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.lf-support-row-full {
+  width: 100%;
+}
+
+.lf-support-row-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.lf-support-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none !important;
+  font-size: 11px;
+  padding: 8px 10px;
+  font-weight: 600;
+  border-radius: var(--lf-border-radius);
+  border: 1px solid var(--lf-border);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.lf-support-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+.lf-support-boosty {
+  background-color: rgba(238, 120, 41, 0.08);
+  border-color: rgba(238, 120, 41, 0.3);
+  color: #ee7829 !important;
+  font-size: 12px;
+  padding: 10px;
+}
+
+.lf-support-boosty:hover {
+  background-color: rgba(238, 120, 41, 0.16);
+  border-color: #ee7829;
+}
+
+.lf-support-yoomoney {
+  background-color: rgba(139, 63, 253, 0.08);
+  border-color: rgba(139, 63, 253, 0.3);
+  color: #8b3ffd !important;
+}
+
+.lf-support-yoomoney:hover {
+  background-color: rgba(139, 63, 253, 0.16);
+  border-color: #8b3ffd;
+}
+
+.lf-support-donationalerts {
+  background-color: rgba(255, 120, 0, 0.08);
+  border-color: rgba(255, 120, 0, 0.3);
+  color: #ff7800 !important;
+}
+
+.lf-support-donationalerts:hover {
+  background-color: rgba(255, 120, 0, 0.16);
+  border-color: #ff7800;
+}
+
+.lf-support-ton {
+  background-color: rgba(0, 152, 234, 0.08);
+  border-color: rgba(0, 152, 234, 0.3);
+  color: #0098ea !important;
+}
+
+.lf-support-ton:hover {
+  background-color: rgba(0, 152, 234, 0.16);
+  border-color: #0098ea;
+}
+
+.lf-support-usdt {
+  background-color: rgba(38, 161, 123, 0.08);
+  border-color: rgba(38, 161, 123, 0.3);
+  color: #26a17b !important;
+}
+
+.lf-support-usdt:hover {
+  background-color: rgba(38, 161, 123, 0.16);
+  border-color: #26a17b;
+}
+
+
 /* DEV_ONLY_START */
 /* Floating DevTrigger Button on the Left side (opposite to right sidebar) */
 #lf-dev-trigger-btn {

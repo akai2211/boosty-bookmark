@@ -3149,6 +3149,7 @@
             <div>${t('about_author')}<strong style="color: var(--lf-text);">Akai</strong></div>
             <div>${t('about_license')}<strong style="color: var(--lf-text);">MIT</strong></div>
             <div>${t('about_privacy')}<strong style="color: var(--lf-text);">${t('about_privacy_desc')}</strong></div>
+            <div style="font-size: 10px; margin-top: 2px; font-style: italic; color: var(--lf-text-muted);">${t('about_disclaimer')}</div>
           </div>
 
           <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -3162,7 +3163,7 @@
               <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: var(--lf-text-muted);">
                 <path d="M20,2H4C2.9,2,2,2.9,2,4v18l4-4h14c1.1,0,2-0.9,2-2V4C22,2.9,21.1,2,20,2z M12,14c-1.1,0-2-0.9-2-2c0-1.1,0.9-2,2-2s2,0.9,2,2C14,13.1,13.1,14,12,14z M13,9h-2V5h2V9z" />
               </svg>
-              <a href="https://github.com/akai2211/boosty-bookmark/issues" target="_blank" style="color: var(--lf-primary); text-decoration: none; font-weight: 600;">${t('about_feedback')}</a>
+              <a href="https://boosty.to/akai2211" target="_blank" style="color: var(--lf-primary); text-decoration: none; font-weight: 600;">${t('about_feedback')}</a>
             </div>
           </div>
         </div>
@@ -3171,13 +3172,42 @@
         <div class="lf-settings-section" style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
           <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--lf-text-muted);">${t('about_support')}</div>
           
-          <div style="display: flex; gap: 8px;">
-            <a href="https://www.donationalerts.com/r/your_username" target="_blank" class="lf-btn-secondary" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; margin: 0; font-size: 11px; padding: 6px 10px; font-weight: 600; background-color: rgba(238, 120, 41, 0.08); border-color: rgba(238, 120, 41, 0.3); color: #ee7829;">
-              DonationAlerts
-            </a>
-            <a href="https://yoomoney.ru/to/your_yoomoney_id" target="_blank" class="lf-btn-secondary" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; margin: 0; font-size: 11px; padding: 6px 10px; font-weight: 600; background-color: rgba(139, 63, 253, 0.08); border-color: rgba(139, 63, 253, 0.3); color: #8b3ffd;">
-              ЮMoney
-            </a>
+          <div class="lf-support-grid">
+            <!-- Ряд 1: Boosty (Subscribe & News) -->
+            <div class="lf-support-row-full">
+              <a href="https://boosty.to/akai2211" target="_blank" class="lf-support-btn lf-support-boosty">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                </svg>
+                <span>${t('about_support_boosty')}</span>
+              </a>
+            </div>
+
+            <!-- Ряд 2: YooMoney & DonationAlerts -->
+            <div class="lf-support-row-split">
+              <a href="https://yoomoney.ru/to/your_yoomoney_id" target="_blank" class="lf-support-btn lf-support-yoomoney">
+                <span>${t('about_support_yoomoney')}</span>
+              </a>
+              <a href="https://www.donationalerts.com/r/your_username" target="_blank" class="lf-support-btn lf-support-donationalerts">
+                <span>${t('about_support_donationalerts')}</span>
+              </a>
+            </div>
+
+            <!-- Ряд 3: TON & USDT (TRC-20) -->
+            <div class="lf-support-row-split">
+              <div id="lf-support-ton" class="lf-support-btn lf-support-ton" data-address="EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c">
+                <svg viewBox="0 0 24 24">
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+                <span>${t('about_support_ton')}</span>
+              </div>
+              <div id="lf-support-usdt" class="lf-support-btn lf-support-usdt" data-address="TR7NHqju6E4yfC5A25w9K1AL42M84kj1e8">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-1H9v-2h4v-1H9c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2h2V6h2v1h2v2h-4v1h4c1.1 0 2 .9 2 2v2c0 1.1-.9 2-2 2h-2v1z"/>
+                </svg>
+                <span>${t('about_support_usdt')}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -3187,6 +3217,46 @@
       state.ui.activeTab = 'settings';
       render();
     });
+
+    // Копирование адреса TON
+    const tonBtn = document.getElementById('lf-support-ton');
+    if (tonBtn) {
+      tonBtn.addEventListener('click', () => {
+        const address = tonBtn.getAttribute('data-address');
+        navigator.clipboard.writeText(address).then(() => {
+          const textSpan = tonBtn.querySelector('span');
+          if (textSpan) {
+            const originalText = textSpan.innerText;
+            textSpan.innerText = t('about_support_copied');
+            tonBtn.style.pointerEvents = 'none';
+            setTimeout(() => {
+              textSpan.innerText = originalText;
+              tonBtn.style.pointerEvents = 'auto';
+            }, 2000);
+          }
+        });
+      });
+    }
+
+    // Копирование адреса USDT
+    const usdtBtn = document.getElementById('lf-support-usdt');
+    if (usdtBtn) {
+      usdtBtn.addEventListener('click', () => {
+        const address = usdtBtn.getAttribute('data-address');
+        navigator.clipboard.writeText(address).then(() => {
+          const textSpan = usdtBtn.querySelector('span');
+          if (textSpan) {
+            const originalText = textSpan.innerText;
+            textSpan.innerText = t('about_support_copied');
+            usdtBtn.style.pointerEvents = 'none';
+            setTimeout(() => {
+              textSpan.innerText = originalText;
+              usdtBtn.style.pointerEvents = 'auto';
+            }, 2000);
+          }
+        });
+      });
+    }
   }
 
   // -------------------------------------------------------------
