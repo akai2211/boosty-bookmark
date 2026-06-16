@@ -122,9 +122,11 @@
   gap: 8px;
 }
 
+/* Дефолтные значения для отката: width: 28px; height: 28px; (без transform) */
 .lf-logo {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
+  transform: translateY(-15px);
 }
 
 .lf-logo-path {
@@ -530,7 +532,7 @@
 
 .lf-manga-delete-new-btn {
   position: absolute;
-  right: 0;
+  right: -6px;
   top: 50%;
   transform: translateY(-50%) scale(0);
   opacity: 0;
@@ -546,8 +548,8 @@
   z-index: 2;
   padding: 0;
   margin: 0;
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
 }
 
 .lf-manga-row:hover .lf-manga-delete-new-btn {

@@ -3469,8 +3469,9 @@
       }
     });
     
-    // Сортировка тайтлов на основе выбранного режима
-    const sortType = state.settings.titleSort || 'name_asc';
+    // Сортировка тайтлов на основе выбранного режима (вкладка «Новые» всегда сортируется по дате последних обновлений по убыванию)
+    const isNewTab = state.ui.activeTab === 'new';
+    const sortType = isNewTab ? 'new_desc' : (state.settings.titleSort || 'name_asc');
     filtered.sort((a, b) => {
       switch (sortType) {
         case 'name_asc':
