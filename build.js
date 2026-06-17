@@ -2,13 +2,17 @@ const fs = require('fs');
 const path = require('path');
 const { ZipArchive } = require('archiver');
 
+const isFirefox = process.argv.includes('--firefox');
 const TMP_DIR = path.join(__dirname, '.tmp_build');
-const RELEASE_ZIP = path.join(__dirname, 'boosty-bookmark-release.zip');
+const RELEASE_ZIP = path.join(
+  __dirname,
+  isFirefox ? 'boosty-bookmark-firefox-release.zip' : 'boosty-bookmark-release.zip'
+);
 
 // Файлы и папки, которые нужно включить в расширение
 const INCLUDE_PATHS = [
   'icons',
-  'manifest.json',
+  isFirefox ? 'manifest.firefox.json' : 'manifest.json',
   'background.js',
   'content.js',
   'styles.css',
@@ -70,7 +74,8 @@ async function build() {
   // 2. Копируем и обрабатываем файлы
   for (const item of INCLUDE_PATHS) {
     const srcPath = path.join(__dirname, item);
-    const destPath = path.join(TMP_DIR, item);
+    const destItemName = item === 'manifest.firefox.json' ? 'manifest.json' : item;
+    const destPath = path.join(TMP_DIR, destItemName);
 
     if (!fs.existsSync(srcPath)) {
       console.warn(`⚠️ Предупреждение: Путь ${item} не найден, пропускаем.`);
