@@ -58,6 +58,8 @@
   let urlCheckIntervalId = null;
   // Хранилище ссылок на обработчики событий для их корректного удаления в cleanup()
   let eventHandlers = {};
+  // Хранит последний проверенный URL с флагом openChat для предотвращения бесконечных циклов
+  let lastCheckedChatUrl = null;
 
   // Проверка, жив ли контекст расширения (не был ли он перезагружен/обновлён)
   function isExtensionContextValid() {
@@ -274,8 +276,90 @@
     }
   }
 
+  // Автоматическое открытие чата с автором при переходе по ссылке с флагом ?openChat=true
+  function checkAndTriggerOpenChat() {
+    const currentUrl = window.location.href;
+    
+    // Проверяем, содержит ли URL параметр openChat
+    const hasOpenChat = currentUrl.includes('openChat=true') || currentUrl.includes('openChat');
+    if (!hasOpenChat) return;
+
+    // Предотвращаем повторный запуск для того же URL
+    if (currentUrl === lastCheckedChatUrl) return;
+    lastCheckedChatUrl = currentUrl;
+
+    const startPathname = window.location.pathname;
+
+    // Убираем флаг из URL, чтобы при перезагрузке чат не открывался повторно
+    try {
+      const url = new URL(currentUrl);
+      if (url.searchParams.has('openChat')) {
+        url.searchParams.delete('openChat');
+      }
+      let newHash = url.hash;
+      if (newHash.includes('openChat')) {
+        newHash = newHash.replace('openChat', '').replace('?openChat', '').replace('&openChat', '').replace('=', '').replace('true', '');
+        newHash = newHash.replace(/^[#&]+/, '#');
+        if (newHash === '#') newHash = '';
+        url.hash = newHash;
+      }
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    } catch (e) {
+      console.error('[Boosty Bookmark] Failed to clean URL:', e);
+    }
+
+    let attempts = 0;
+    const maxAttempts = 30; // ~15 секунд при 500мс интервале
+
+    const interval = setInterval(() => {
+      // Если во время ожидания пользователь ушёл со страницы, прекращаем попытки
+      if (window.location.pathname !== startPathname) {
+        clearInterval(interval);
+        return;
+      }
+      
+      attempts++;
+
+      // Ищем кнопку чата
+      // 1. По data-test-id (наиболее надежный селектор для Boosty)
+      let chatBtn = document.querySelector('button[data-test-id="AUTHORCARDBLOCK:messageButton"]');
+
+      // 2. Фолбек по тексту кнопки
+      if (!chatBtn) {
+        const buttons = Array.from(document.querySelectorAll('button, [role="button"], a'));
+        chatBtn = buttons.find(el => {
+          const text = (el.textContent || el.innerText || '').toLowerCase().trim();
+          return text === 'чат' || text === 'chat' || text === 'написать сообщение' || text === 'сообщение';
+        });
+      }
+
+      // 3. Фолбек по классу, содержащему messageButton
+      if (!chatBtn) {
+        chatBtn = document.querySelector('[class*="messageButton"]');
+      }
+
+      if (chatBtn) {
+        clearInterval(interval);
+        try {
+          chatBtn.click();
+          console.log('[Boosty Bookmark] Automatically opened chat.');
+        } catch (e) {
+          console.error('[Boosty Bookmark] Failed to click chat button:', e);
+        }
+        return;
+      }
+
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        console.warn('[Boosty Bookmark] Chat button not found after maximum attempts.');
+      }
+    }, 500);
+  }
+
   // Управление видимостью интерфейса в зависимости от URL
   async function checkUrlAndToggleVisibility() {
+    checkAndTriggerOpenChat();
+
     const isTarget = isTargetPage();
     const btn = document.getElementById('lf-trigger-btn');
     const sidebar = document.getElementById('lf-sidebar');
@@ -3320,7 +3404,7 @@
               <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: var(--lf-text-muted);">
                 <path d="M20,2H4C2.9,2,2,2.9,2,4v18l4-4h14c1.1,0,2-0.9,2-2V4C22,2.9,21.1,2,20,2z M12,14c-1.1,0-2-0.9-2-2c0-1.1,0.9-2,2-2s2,0.9,2,2C14,13.1,13.1,14,12,14z M13,9h-2V5h2V9z" />
               </svg>
-              <a href="https://boosty.to/akai2211" target="_blank" style="color: var(--lf-primary); text-decoration: none; font-weight: 600;">${t('about_feedback')}</a>
+              <a href="https://boosty.to/akai2211?openChat=true" target="_blank" style="color: var(--lf-primary); text-decoration: none; font-weight: 600;">${t('about_feedback')}</a>
             </div>
           </div>
         </div>
@@ -5057,6 +5141,7 @@
       formatDate,
       arePostsEqual,
       getGroupedTitles,
+      checkAndTriggerOpenChat,
       BLOG_SLUG,
       TAGS_BLACKLIST,
       TAB_NAMES

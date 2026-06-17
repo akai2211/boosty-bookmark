@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 
 // 1. Настройка моков для глобальных объектов Chrome
 global.chrome = {
@@ -158,6 +159,81 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
       expect(content.state.user_data['Реинкарнация бездельника']).toBeDefined();
       expect(content.state.user_data['Реинкарнация бездельника'].notes).toBe('пример 2');
       expect(content.state.user_data['Реинкарнация бездельника'].updatedAt).toBe(200);
+    });
+  });
+
+  describe('checkAndTriggerOpenChat', () => {
+    let originalWindow;
+    let originalDocument;
+
+    beforeEach(() => {
+      originalWindow = global.window;
+      originalDocument = global.document;
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      global.window = originalWindow;
+      global.document = originalDocument;
+      vi.useRealTimers();
+    });
+
+    it('должен проигнорировать вызов, если в URL нет параметра openChat', () => {
+      global.window = {
+        location: {
+          href: 'https://boosty.to/akai2211',
+          pathname: '/akai2211'
+        },
+        history: {
+          replaceState: vi.fn()
+        }
+      };
+      
+      const querySelectorSpy = vi.fn();
+      global.document = {
+        querySelector: querySelectorSpy,
+        querySelectorAll: vi.fn(() => [])
+      };
+
+      content.checkAndTriggerOpenChat();
+      expect(querySelectorSpy).not.toHaveBeenCalled();
+    });
+
+    it('должен запустить интервал поиска и кликнуть по кнопке чата при наличии openChat в URL', () => {
+      const replaceStateSpy = vi.fn();
+      global.window = {
+        location: {
+          href: 'https://boosty.to/akai2211?openChat=true',
+          pathname: '/akai2211',
+          search: '?openChat=true',
+          hash: ''
+        },
+        history: {
+          replaceState: replaceStateSpy
+        }
+      };
+
+      const mockButton = { click: vi.fn() };
+      global.document = {
+        querySelector: vi.fn((selector) => {
+          if (selector === 'button[data-test-id="AUTHORCARDBLOCK:messageButton"]') {
+            return mockButton;
+          }
+          return null;
+        }),
+        querySelectorAll: vi.fn(() => [])
+      };
+
+      content.checkAndTriggerOpenChat();
+
+      // Должен очистить URL от параметра openChat
+      expect(replaceStateSpy).toHaveBeenCalled();
+
+      // Прокручиваем таймер вперед
+      vi.advanceTimersByTime(500);
+
+      // Кнопка должна быть найдена и кликнута
+      expect(mockButton.click).toHaveBeenCalled();
     });
   });
 });
