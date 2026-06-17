@@ -200,12 +200,6 @@
       // Названия категорий/тиров
       category_free: 'Бесплатные',
       category_announcements: 'Объявления',
-      category_girls: 'Только для девушек',
-      category_martial_peak: 'Любителям пика',
-      category_youtube: 'Любителям ютуба',
-      category_manga: 'Любителям манги',
-      category_foxes: 'Лисямбы мои',
-      category_sheikhs: 'Для шейхов',
       category_all: 'Все',
 
       notify_backup_read_error: 'Не удалось прочитать данные для бэкапа.',
@@ -235,7 +229,27 @@
       error_webdav_module_not_loaded: 'Модуль синхронизации не загружен',
       error_webdav_no_username: 'Укажите имя пользователя',
       error_webdav_no_access_code: 'Укажите код доступа',
-      error_webdav_no_background_response: 'Нет ответа от фонового скрипта'
+      error_webdav_no_background_response: 'Нет ответа от фонового скрипта',
+
+      empty_search_results: 'Ничего не найдено в этой категории.',
+      confirm_clear_all_new_short: 'Точно очистить?',
+      post_liked_on_boosty: 'Этот пост лайкнут на Boosty',
+      player_progress_tooltip: 'Прогресс воспроизведения',
+      player_progress_watched: 'Просмотрено {0} из {1}',
+      player_progress_stopped: 'Остановился на {0}',
+      untitled_post: 'Без названия',
+      month_0: 'янв',
+      month_1: 'фев',
+      month_2: 'мар',
+      month_3: 'апр',
+      month_4: 'май',
+      month_5: 'июн',
+      month_6: 'июл',
+      month_7: 'авг',
+      month_8: 'сен',
+      month_9: 'окт',
+      month_10: 'ноя',
+      month_11: 'дек'
     },
     en: {
       // Frame & Header
@@ -435,12 +449,6 @@
       // Category names / tiers
       category_free: 'Free',
       category_announcements: 'Announcements',
-      category_girls: 'Girls Only',
-      category_martial_peak: 'Martial Peak Fans',
-      category_youtube: 'YouTube Fans',
-      category_manga: 'Manga Fans',
-      category_foxes: 'My Foxes',
-      category_sheikhs: 'For Sheikhs',
       category_all: 'All',
 
       notify_backup_read_error: 'Failed to read backup data.',
@@ -470,7 +478,27 @@
       error_webdav_module_not_loaded: 'Sync module is not loaded',
       error_webdav_no_username: 'Specify username',
       error_webdav_no_access_code: 'Specify access code',
-      error_webdav_no_background_response: 'No response from background script'
+      error_webdav_no_background_response: 'No response from background script',
+
+      empty_search_results: 'Nothing found in this category.',
+      confirm_clear_all_new_short: 'Are you sure?',
+      post_liked_on_boosty: 'This post is liked on Boosty',
+      player_progress_tooltip: 'Playback progress',
+      player_progress_watched: 'Watched {0} of {1}',
+      player_progress_stopped: 'Stopped at {0}',
+      untitled_post: 'Untitled',
+      month_0: 'Jan',
+      month_1: 'Feb',
+      month_2: 'Mar',
+      month_3: 'Apr',
+      month_4: 'May',
+      month_5: 'Jun',
+      month_6: 'Jul',
+      month_7: 'Aug',
+      month_8: 'Sep',
+      month_9: 'Oct',
+      month_10: 'Nov',
+      month_11: 'Dec'
     }
   };
 
@@ -502,16 +530,9 @@
     return text;
   }
 
-  // Перевод категорий (тиров подписок)
   const categoryKeys = {
     'Бесплатные': 'category_free',
     'Объявления': 'category_announcements',
-    'Только для девушек': 'category_girls',
-    'Любителям пика': 'category_martial_peak',
-    'Любителям ютуба': 'category_youtube',
-    'Любителям манги': 'category_manga',
-    'Лисямбы мои': 'category_foxes',
-    'Для шейхов': 'category_sheikhs',
     'Все': 'category_all',
     'Категория не определена': 'detail_category_undefined',
     'Новые главы (в подписках)': 'group_new_chapters',
@@ -522,9 +543,8 @@
   };
 
   function tCategory(catName) {
-    const key = categoryKeys[catName] || catName;
-    // Если ключа нет в словаре, t() вернет сам ключ, то есть catName без изменений
-    return t(key);
+    const key = categoryKeys[catName];
+    return key ? t(key) : catName;
   }
 
   global.locales = locales;

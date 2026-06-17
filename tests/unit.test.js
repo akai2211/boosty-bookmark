@@ -12,6 +12,14 @@ global.chrome = {
   runtime: {
     id: 'test-extension-id',
     lastError: null,
+    getManifest: vi.fn(() => {
+      try {
+        const manifest = require('../manifest.json');
+        return { version: manifest.version };
+      } catch (e) {
+        return { version: '0.9.0' };
+      }
+    })
   }
 };
 

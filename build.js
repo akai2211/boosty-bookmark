@@ -61,6 +61,37 @@ function cleanDevCode(fileContent) {
 async function build() {
   console.log('🚀 Начинаем сборку релиза...');
 
+  // Считываем версию из manifest.json как единственного источника правды
+  const manifestPath = path.join(__dirname, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error('manifest.json не найден!');
+  }
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const version = manifest.version;
+  console.log(`📌 Текущая версия в manifest.json: ${version}`);
+
+  // Синхронизируем версию в manifest.firefox.json
+  const firefoxManifestPath = path.join(__dirname, 'manifest.firefox.json');
+  if (fs.existsSync(firefoxManifestPath)) {
+    const ffManifest = JSON.parse(fs.readFileSync(firefoxManifestPath, 'utf8'));
+    if (ffManifest.version !== version) {
+      ffManifest.version = version;
+      fs.writeFileSync(firefoxManifestPath, JSON.stringify(ffManifest, null, 2) + '\n', 'utf8');
+      console.log(`🔄 Версия в manifest.firefox.json успешно обновлена до ${version}`);
+    }
+  }
+
+  // Синхронизируем версию в package.json
+  const packagePath = path.join(__dirname, 'package.json');
+  if (fs.existsSync(packagePath)) {
+    const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+    if (pkg.version !== version) {
+      pkg.version = version;
+      fs.writeFileSync(packagePath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+      console.log(`🔄 Версия в package.json успешно обновлена до ${version}`);
+    }
+  }
+
   // 1. Очищаем старые следы
   if (fs.existsSync(TMP_DIR)) {
     deleteFolderRecursive(TMP_DIR);

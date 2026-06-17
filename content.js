@@ -471,7 +471,7 @@
           if (updatedManga) {
             const headerLabel = document.querySelector('.lf-chapters-header .lf-field-label');
             if (headerLabel) {
-              headerLabel.textContent = `Список глав (${updatedManga.readCount}/${updatedManga.posts.length})`;
+              headerLabel.textContent = t('detail_chapters_count_label', updatedManga.readCount, updatedManga.posts.length);
             }
           }
         }
@@ -529,6 +529,17 @@
 
   // Инициализация расширения
   async function init() {
+    let version = '0.9.0';
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getManifest === 'function') {
+        const manifest = chrome.runtime.getManifest();
+        if (manifest && manifest.version) {
+          version = manifest.version;
+        }
+      }
+    } catch (e) {}
+    console.log(`[Boosty Bookmark] Загружена версия ${version}`);
+
     await loadStateFromStorage();
     await loadWebDavConfig();
     /* DEV_ONLY_START */
@@ -2181,15 +2192,17 @@
       } else if (lowercaseName.includes('только для девушек') || lowercaseName.includes('охотник на охотника')) {
         category = 'Только для девушек';
       } else if (lowercaseName.includes('пик боевых искусств') || title.subscriptionLevels.has('Любители пика💥')) {
-        category = 'Любителям пика';
+        category = 'Любители пика💥';
       } else if (title.subscriptionLevels.has('Любитель ютуба')) {
-        category = 'Любителям ютуба';
+        category = 'Любитель ютуба';
       } else if (title.subscriptionLevels.has('Любитель манги😈')) {
-        category = 'Любителям манги';
+        category = 'Любитель манги😈';
       } else if (title.subscriptionLevels.has('Лисямбы🦊')) {
-        category = 'Лисямбы мои';
+        category = 'Лисямбы🦊';
       } else if (title.subscriptionLevels.has('Массонский орден шейхов💎')) {
-        category = 'Для шейхов';
+        category = 'Массонский орден шейхов💎';
+      } else if (title.subscriptionLevels.size > 0) {
+        category = Array.from(title.subscriptionLevels)[0];
       }
       
       // Автоматическое присвоение статуса "Завершено" или "Смотрю" на основе прогресса
@@ -3366,6 +3379,18 @@
     // Сбрасываем скролл наверх
     container.scrollTop = 0;
 
+    let version = '0.9.0';
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getManifest === 'function') {
+        const manifest = chrome.runtime.getManifest();
+        if (manifest && manifest.version) {
+          version = manifest.version;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to get manifest version:', e);
+    }
+
     container.innerHTML = `
       <div class="lf-detail" style="gap: 8px;">
         <div class="lf-detail-back" id="lf-about-back" style="margin-bottom: 4px;">
@@ -3379,7 +3404,7 @@
         <div class="lf-settings-section" style="padding: 10px; display: flex; flex-direction: column; gap: 10px; line-height: 1.5; font-size: 12px;">
           <div>
             <strong style="font-size: 14px; color: var(--lf-text);">Boosty Bookmark</strong>
-            <span style="font-size: 10px; color: var(--lf-text-muted); margin-left: 6px;">v1.0</span>
+            <span style="font-size: 10px; color: var(--lf-text-muted); margin-left: 6px;">v${version}</span>
           </div>
           
           <div style="color: var(--lf-text-muted);">
@@ -3729,7 +3754,7 @@
           <svg viewBox="0 0 24 24">
             <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
           </svg>
-          <div>Ничего не найдено в этой категории.</div>
+          <div>${t('empty_search_results')}</div>
         </div>
       `;
       return;
@@ -3790,7 +3815,7 @@
               <svg viewBox="0 0 24 24">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
               </svg>
-              ${t('btn_clear_new_short').includes('Очистить') ? 'Точно очистить?' : 'Are you sure?'}
+              ${t('confirm_clear_all_new_short')}
             `;
             confirmTimeout = setTimeout(resetConfirmState, 3000);
           } else {
@@ -3860,16 +3885,22 @@
     const categories = [
       'Все',
       'Полностью озвучено',
-      'Завершен том',
-      'Любителям ютуба',
-      'Любителям манги',
-      'Только для девушек',
-      'Любителям пика',
-      'Для шейхов',
-      'Лисямбы мои',
-      'Бесплатные',
-      'Объявления'
+      'Завершен том'
     ];
+    
+    // Динамически собираем уникальные категории тайтлов, исключая системные
+    const uniqueUserCategories = new Set();
+    filtered.forEach(t => {
+      if (t.category && t.category !== 'Бесплатные' && t.category !== 'Объявления') {
+        uniqueUserCategories.add(t.category);
+      }
+    });
+    
+    // Сортируем пользовательские категории по алфавиту
+    const sortedUserCategories = Array.from(uniqueUserCategories).sort((a, b) => a.localeCompare(b));
+    categories.push(...sortedUserCategories);
+    
+    categories.push('Бесплатные', 'Объявления');
     
     categories.forEach(catName => {
       let catTitles = [];
@@ -3986,23 +4017,23 @@
           const timeStr = formatSeconds(progress.time);
           if (typeof progress.duration === 'number' && progress.duration > 0) {
             const durationStr = formatSeconds(progress.duration);
-            progressHtml = `<span class="lf-chapter-player-progress" title="Прогресс воспроизведения">
+            progressHtml = `<span class="lf-chapter-player-progress" title="${escapeHtml(t('player_progress_tooltip'))}">
               <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
-              Просмотрено ${timeStr} из ${durationStr}
+              ${escapeHtml(t('player_progress_watched', timeStr, durationStr))}
             </span>`;
           } else {
-            progressHtml = `<span class="lf-chapter-player-progress" title="Прогресс воспроизведения">
+            progressHtml = `<span class="lf-chapter-player-progress" title="${escapeHtml(t('player_progress_tooltip'))}">
               <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
-              Остановился на ${timeStr}
+              ${escapeHtml(t('player_progress_stopped', timeStr))}
             </span>`;
           }
         }
 
         row.innerHTML = `
-          <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? 'title="Этот пост лайкнут на Boosty"' : ''}>
+          <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? `title="${escapeHtml(t('post_liked_on_boosty'))}"` : ''}>
           <div class="lf-chapter-title-container">
-            <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title)}">
-              ${escapeHtml(post.title)}
+            <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title === 'Без названия' ? t('untitled_post') : post.title)}">
+              ${escapeHtml(post.title === 'Без названия' ? t('untitled_post') : post.title)}
             </a>
             ${progressHtml}
           </div>
@@ -4032,10 +4063,10 @@
                   if (container) {
                     progressEl = document.createElement('span');
                     progressEl.className = 'lf-chapter-player-progress';
-                    progressEl.title = 'Прогресс воспроизведения';
+                    progressEl.title = t('player_progress_tooltip');
                     const timeStr = formatSeconds(prog.time);
                     const durationStr = (typeof prog.duration === 'number' && prog.duration > 0) ? formatSeconds(prog.duration) : null;
-                    const text = durationStr ? `Просмотрено ${timeStr} из ${durationStr}` : `Остановился на ${timeStr}`;
+                    const text = durationStr ? t('player_progress_watched', timeStr, durationStr) : t('player_progress_stopped', timeStr);
                     progressEl.innerHTML = `
                       <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
                       ${text}
@@ -4138,7 +4169,7 @@
     row.innerHTML = `
       <div class="lf-manga-info">
         <div class="lf-status-dot lf-${manga.statusColor}" title="${getStatusTooltip(manga.statusColor)}"></div>
-        <span class="lf-manga-title" title="${escapeHtml(manga.name)}">${escapeHtml(manga.name)}</span>
+        <span class="lf-manga-title" title="${escapeHtml(manga.name === 'Объявления' ? tCategory(manga.name) : manga.name)}">${escapeHtml(manga.name === 'Объявления' ? tCategory(manga.name) : manga.name)}</span>
       </div>
       <div class="lf-manga-meta ${isNewTab ? 'lf-has-delete' : ''}">
         <span class="lf-manga-progress">${manga.readCount}/${manga.posts.length}</span>
@@ -4220,7 +4251,7 @@
         <!-- Заголовок -->
         <h2 class="lf-detail-title">
           ${isAnnouncements 
-            ? `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(manga.name)}</span>`
+            ? `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(tCategory(manga.name))}</span>`
             : `<a class="lf-detail-title-link" href="${tagUrl}" ${targetAttr} title="${t('detail_title_tag_tooltip')}">
                 <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(manga.name)}</span>
                 <svg viewBox="0 0 24 24">
@@ -4390,23 +4421,23 @@
         const timeStr = formatSeconds(progress.time);
         if (typeof progress.duration === 'number' && progress.duration > 0) {
           const durationStr = formatSeconds(progress.duration);
-          progressHtml = `<span class="lf-chapter-player-progress" title="Прогресс воспроизведения">
+          progressHtml = `<span class="lf-chapter-player-progress" title="${escapeHtml(t('player_progress_tooltip'))}">
             <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
-            Просмотрено ${timeStr} из ${durationStr}
+            ${escapeHtml(t('player_progress_watched', timeStr, durationStr))}
           </span>`;
         } else {
-          progressHtml = `<span class="lf-chapter-player-progress" title="Прогресс воспроизведения">
+          progressHtml = `<span class="lf-chapter-player-progress" title="${escapeHtml(t('player_progress_tooltip'))}">
             <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
-            Остановился на ${timeStr}
+            ${escapeHtml(t('player_progress_stopped', timeStr))}
           </span>`;
         }
       }
 
       row.innerHTML = `
-        <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? 'title="Этот пост лайкнут на Boosty"' : ''}>
+        <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? `title="${escapeHtml(t('post_liked_on_boosty'))}"` : ''}>
         <div class="lf-chapter-title-container">
-          <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title)}">
-            ${escapeHtml(post.title)}
+          <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title === 'Без названия' ? t('untitled_post') : post.title)}">
+            ${escapeHtml(post.title === 'Без названия' ? t('untitled_post') : post.title)}
           </a>
           ${progressHtml}
         </div>
@@ -4438,10 +4469,10 @@
                 if (container) {
                   progressEl = document.createElement('span');
                   progressEl.className = 'lf-chapter-player-progress';
-                  progressEl.title = 'Прогресс воспроизведения';
+                  progressEl.title = t('player_progress_tooltip');
                   const timeStr = formatSeconds(prog.time);
                   const durationStr = (typeof prog.duration === 'number' && prog.duration > 0) ? formatSeconds(prog.duration) : null;
-                  const text = durationStr ? `Просмотрено ${timeStr} из ${durationStr}` : `Остановился на ${timeStr}`;
+                  const text = durationStr ? t('player_progress_watched', timeStr, durationStr) : t('player_progress_stopped', timeStr);
                   progressEl.innerHTML = `
                     <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
                     ${text}
@@ -4483,7 +4514,7 @@
         if (updatedManga) {
           const headerLabel = document.querySelector('.lf-chapters-header .lf-field-label');
           if (headerLabel) {
-            headerLabel.textContent = `Список глав (${updatedManga.readCount}/${updatedManga.posts.length})`;
+            headerLabel.textContent = t('detail_chapters_count_label', updatedManga.readCount, updatedManga.posts.length);
           }
         }
       });
@@ -4604,7 +4635,7 @@
     let progressEl = container.querySelector('.lf-chapter-player-progress');
     const timeStr = formatSeconds(time);
     const durationStr = duration > 0 ? formatSeconds(duration) : null;
-    const text = durationStr ? `Просмотрено ${timeStr} из ${durationStr}` : `Остановился на ${timeStr}`;
+    const text = durationStr ? t('player_progress_watched', timeStr, durationStr) : t('player_progress_stopped', timeStr);
     
     if (progressEl) {
       progressEl.innerHTML = `
@@ -4614,7 +4645,7 @@
     } else {
       progressEl = document.createElement('span');
       progressEl.className = 'lf-chapter-player-progress';
-      progressEl.title = 'Прогресс воспроизведения';
+      progressEl.title = t('player_progress_tooltip');
       progressEl.innerHTML = `
         <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
         ${text}
@@ -4903,11 +4934,8 @@
   // Красивое форматирование даты (например, "15 мая 2026")
   function formatDate(timestamp) {
     const date = new Date(timestamp * 1000);
-    const months = [
-      'янв', 'фев', 'мар', 'апр', 'май', 'июн',
-      'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'
-    ];
-    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    const monthStr = t('month_' + date.getMonth());
+    return `${date.getDate()} ${monthStr} ${date.getFullYear()}`;
   }
 
   /* DEV_ONLY_START */
