@@ -3325,24 +3325,8 @@
               </a>
             </div>
 
-            <!-- Ряд 2: YooMoney & DonationAlerts -->
-            <div class="lf-support-row-split">
-              <a href="https://yoomoney.ru/to/your_yoomoney_id" target="_blank" class="lf-support-btn lf-support-yoomoney">
-                <span>${t('about_support_yoomoney')}</span>
-              </a>
-              <a href="https://www.donationalerts.com/r/your_username" target="_blank" class="lf-support-btn lf-support-donationalerts">
-                <span>${t('about_support_donationalerts')}</span>
-              </a>
-            </div>
-
-            <!-- Ряд 3: TON & USDT (TRC-20) -->
-            <div class="lf-support-row-split">
-              <div id="lf-support-ton" class="lf-support-btn lf-support-ton" data-address="EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c">
-                <svg viewBox="0 0 24 24">
-                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                </svg>
-                <span>${t('about_support_ton')}</span>
-              </div>
+            <!-- Ряд 2: USDT (TRC-20) -->
+            <div class="lf-support-row-full">
               <div id="lf-support-usdt" class="lf-support-btn lf-support-usdt" data-address="TR7NHqju6E4yfC5A25w9K1AL42M84kj1e8">
                 <svg viewBox="0 0 24 24">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-1H9v-2h4v-1H9c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2h2V6h2v1h2v2h-4v1h4c1.1 0 2 .9 2 2v2c0 1.1-.9 2-2 2h-2v1z"/>
@@ -3360,43 +3344,128 @@
       render();
     });
 
-    // Копирование адреса TON
-    const tonBtn = document.getElementById('lf-support-ton');
-    if (tonBtn) {
-      tonBtn.addEventListener('click', () => {
-        const address = tonBtn.getAttribute('data-address');
-        navigator.clipboard.writeText(address).then(() => {
-          const textSpan = tonBtn.querySelector('span');
-          if (textSpan) {
-            const originalText = textSpan.innerText;
-            textSpan.innerText = t('about_support_copied');
-            tonBtn.style.pointerEvents = 'none';
-            setTimeout(() => {
-              textSpan.innerText = originalText;
-              tonBtn.style.pointerEvents = 'auto';
-            }, 2000);
-          }
-        });
-      });
-    }
-
-    // Копирование адреса USDT
+    // Открытие модального окна USDT
     const usdtBtn = document.getElementById('lf-support-usdt');
     if (usdtBtn) {
       usdtBtn.addEventListener('click', () => {
-        const address = usdtBtn.getAttribute('data-address');
-        navigator.clipboard.writeText(address).then(() => {
-          const textSpan = usdtBtn.querySelector('span');
-          if (textSpan) {
-            const originalText = textSpan.innerText;
-            textSpan.innerText = t('about_support_copied');
-            usdtBtn.style.pointerEvents = 'none';
-            setTimeout(() => {
-              textSpan.innerText = originalText;
-              usdtBtn.style.pointerEvents = 'auto';
-            }, 2000);
+        let modal = document.getElementById('lf-usdt-modal');
+        if (!modal) {
+          modal = document.createElement('div');
+          modal.id = 'lf-usdt-modal';
+          modal.className = 'lf-modal-overlay';
+          modal.innerHTML = `
+            <div class="lf-modal-content">
+              <div class="lf-modal-header">
+                <h3 class="lf-modal-title">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-1H9v-2h4v-1H9c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2h2V6h2v1h2v2h-4v1h4c1.1 0 2 .9 2 2v2c0 1.1-.9 2-2 2h-2v1z"/>
+                  </svg>
+                  ${t('about_support_usdt_modal_title')}
+                </h3>
+                <button id="lf-modal-close-btn" class="lf-modal-close">&times;</button>
+              </div>
+              <div class="lf-modal-body">
+                <div class="lf-modal-qr-container" style="cursor: pointer;" title="${t('about_support_usdt_modal_double_click_tooltip')}">
+                  <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADIAQMAAACXljzdAAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAABj0lEQVRYhdWYMZKDMAxFxVC45AgcxTeLfTQfxUegpGCs/V/yZmd3JzVChUP8UkT460sg8jGKMmQ9cb3ouTesjBGAvOwPYm/Tysusy8XP4GRV7UWwNhnIKtfl2lTrEwjzacgiYe85BHtHVr1Sx4k8gbh2rnRA/FfCWfxR1Y3Eq5EkVyhkb+V3ncYkP8E6ZD7/Ix5hPp0L8jGFoCYPZBWbQCnwvOF+fcmuVd3BQxOkcuzsMuBUTaML9lyDE8vn26+5KrJqrNP7id/Zla5M98i4Pt66jkroyuzYdOUhqdNJeK9HaGKngICuC9wOdThkQ0eR0MTcuU7ng53YquSRCWKzGYldBqeArOB89JDIpGA66qjK5DK3XoMNiUBeqEP2EvM3dsA5gcYn3j98VhYnJThxhcic6VCNqt5LIhMPm+zUgz+NTop9g29witZzV1N8dOKzv3eZOW3AwKd27ib+pOcTvkyFmE8/gZhQ7LnE8pGHEJs6+d5lvN0lMDHt+LsAr8Yx1RSZzGqcT3+2zlkvMvkYX0WCj/izVOdTAAAAAElFTkSuQmCC" alt="USDT QR Code" />
+                </div>
+                
+                <div class="lf-modal-info-box">
+                  <strong style="color: var(--lf-primary); display: block; margin-bottom: 4px;">${t('about_support_usdt_modal_warning_title')}</strong>
+                  <div style="opacity: 0.95; line-height: 1.4;">
+                    ${t('about_support_usdt_modal_desc')}
+                  </div>
+                </div>
+
+                <div class="lf-modal-address-block">
+                  <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0;">
+                    <div class="lf-modal-address-label">${t('about_support_usdt_modal_address_label')}</div>
+                    <div id="lf-modal-address" class="lf-modal-address-value" style="cursor: pointer;" title="${t('about_support_usdt_modal_double_click_tooltip')}">TR7NHqju6E4yfC5A25w9K1AL42M84kj1e8</div>
+                  </div>
+                  <button id="lf-modal-inline-copy-btn" class="lf-modal-inline-copy-btn" title="${t('about_support_usdt_modal_copy_btn')}">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <button id="lf-modal-copy-btn" class="lf-modal-copy-btn">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"/>
+                  </svg>
+                  <span>${t('about_support_usdt_modal_copy_btn')}</span>
+                </button>
+              </div>
+            </div>
+          `;
+          const sidebar = document.getElementById('lf-sidebar');
+          if (sidebar) {
+            sidebar.appendChild(modal);
           }
-        });
+
+          // Настраиваем события
+          const closeBtn = modal.querySelector('#lf-modal-close-btn');
+          const copyBtn = modal.querySelector('#lf-modal-copy-btn');
+          const inlineCopyBtn = modal.querySelector('#lf-modal-inline-copy-btn');
+          const addressVal = modal.querySelector('#lf-modal-address');
+          const qrContainer = modal.querySelector('.lf-modal-qr-container');
+
+          const closeModal = () => {
+            modal.classList.remove('lf-show');
+            setTimeout(() => {
+              modal.remove();
+            }, 200);
+          };
+
+          closeBtn.addEventListener('click', closeModal);
+          modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+              closeModal();
+            }
+          });
+
+          // Общая функция копирования с визуальной обратной связью
+          const performCopy = () => {
+            navigator.clipboard.writeText(addressVal.innerText).then(() => {
+              // Глобальный тост-нотификация
+              showNotification(t('about_support_copied'));
+
+              // Анимация текста на основной кнопке копирования
+              const textSpan = copyBtn.querySelector('span');
+              if (textSpan) {
+                const originalText = textSpan.innerText;
+                textSpan.innerText = t('about_support_copied');
+                copyBtn.style.backgroundColor = '#26a17b';
+                copyBtn.style.pointerEvents = 'none';
+                setTimeout(() => {
+                  textSpan.innerText = originalText;
+                  copyBtn.style.backgroundColor = '';
+                  copyBtn.style.pointerEvents = 'auto';
+                }, 2000);
+              }
+
+              // Анимация цвета на встроенной иконке копирования
+              const originalInlineColor = inlineCopyBtn.style.color;
+              inlineCopyBtn.style.color = '#26a17b';
+              inlineCopyBtn.style.pointerEvents = 'none';
+              setTimeout(() => {
+                inlineCopyBtn.style.color = originalInlineColor;
+                inlineCopyBtn.style.pointerEvents = 'auto';
+              }, 2000);
+            });
+          };
+
+          // Копирование по клику на кнопки
+          copyBtn.addEventListener('click', performCopy);
+          inlineCopyBtn.addEventListener('click', performCopy);
+
+          // Копирование по двойному клику на адрес и QR-код
+          addressVal.addEventListener('dblclick', performCopy);
+          qrContainer.addEventListener('dblclick', performCopy);
+        }
+
+        setTimeout(() => {
+          modal.classList.add('lf-show');
+        }, 10);
       });
     }
   }

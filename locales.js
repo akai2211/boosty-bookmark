@@ -177,6 +177,14 @@
       about_support_ton: 'TON',
       about_support_usdt: 'USDT (TRC-20)',
       about_support_copied: 'Адрес скопирован! ✓',
+      about_support_usdt_modal_title: 'Поддержка USDT (TRC-20)',
+      about_support_usdt_modal_warning_title: 'Важная инструкция:',
+      about_support_usdt_modal_desc: 'Переводите только на адрес в сети TRC-20 (TRON). Отправка USDT через другие сети (ERC-20, BSC, Arbitrum и др.) приведет к безвозвратной потере средств.',
+      about_support_usdt_modal_address_label: 'Адрес USDT (TRC-20)',
+      about_support_usdt_modal_copy_btn: 'Скопировать адрес',
+      about_support_usdt_modal_double_click_tooltip: 'Двойной клик для копирования',
+
+
 
       // Группа "Завершен том" в Смотрю
       group_volume_finished: 'Завершен том',
@@ -401,6 +409,14 @@
       about_support_ton: 'TON',
       about_support_usdt: 'USDT (TRC-20)',
       about_support_copied: 'Address copied! ✓',
+      about_support_usdt_modal_title: 'USDT (TRC-20) Support',
+      about_support_usdt_modal_warning_title: 'Important Instruction:',
+      about_support_usdt_modal_desc: 'Send ONLY to the address in the TRC-20 (TRON) network. Sending USDT via other networks (ERC-20, BSC, Arbitrum, etc.) will result in permanent loss of funds.',
+      about_support_usdt_modal_address_label: 'USDT (TRC-20) Address',
+      about_support_usdt_modal_copy_btn: 'Copy Address',
+      about_support_usdt_modal_double_click_tooltip: 'Double click to copy',
+
+
 
       // Group "Volume finished" in Watching
       group_volume_finished: 'Volume finished',

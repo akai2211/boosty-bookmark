@@ -768,6 +768,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   line-height: 1.3;
@@ -1367,7 +1368,6 @@
 
 .lf-settings-input-password {
   -webkit-text-security: disc;
-  text-security: disc;
 }
 
 .lf-input-eye-btn {
@@ -1475,49 +1475,229 @@
   border-color: #ee7829;
 }
 
-.lf-support-yoomoney {
-  background-color: rgba(139, 63, 253, 0.08);
-  border-color: rgba(139, 63, 253, 0.3);
-  color: #8b3ffd !important;
-}
-
-.lf-support-yoomoney:hover {
-  background-color: rgba(139, 63, 253, 0.16);
-  border-color: #8b3ffd;
-}
-
-.lf-support-donationalerts {
-  background-color: rgba(255, 120, 0, 0.08);
-  border-color: rgba(255, 120, 0, 0.3);
-  color: #ff7800 !important;
-}
-
-.lf-support-donationalerts:hover {
-  background-color: rgba(255, 120, 0, 0.16);
-  border-color: #ff7800;
-}
-
-.lf-support-ton {
-  background-color: rgba(0, 152, 234, 0.08);
-  border-color: rgba(0, 152, 234, 0.3);
-  color: #0098ea !important;
-}
-
-.lf-support-ton:hover {
-  background-color: rgba(0, 152, 234, 0.16);
-  border-color: #0098ea;
-}
 
 .lf-support-usdt {
   background-color: rgba(38, 161, 123, 0.08);
   border-color: rgba(38, 161, 123, 0.3);
   color: #26a17b !important;
+  font-size: 12px;
+  padding: 10px;
 }
 
 .lf-support-usdt:hover {
   background-color: rgba(38, 161, 123, 0.16);
   border-color: #26a17b;
 }
+
+/* USDT Modal Popup Styles */
+.lf-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100001;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  padding: 16px;
+}
+
+.lf-modal-overlay.lf-show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lf-modal-content {
+  background-color: var(--lf-card-bg);
+  border: 1px solid var(--lf-border);
+  border-radius: var(--lf-border-radius);
+  width: 100%;
+  max-width: 310px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: lfModalScale 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes lfModalScale {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.lf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--lf-border);
+}
+
+.lf-modal-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lf-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lf-modal-title svg {
+  width: 16px;
+  height: 16px;
+  fill: #26a17b;
+  flex-shrink: 0;
+}
+
+.lf-modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--lf-text-muted);
+  font-size: 22px;
+  line-height: 1;
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.lf-modal-close:hover {
+  color: var(--lf-text);
+}
+
+.lf-modal-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--lf-text);
+  line-height: 1.45;
+}
+
+.lf-modal-qr-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #ffffff;
+  padding: 10px;
+  border-radius: 6px;
+  width: 140px;
+  height: 140px;
+  margin: 0 auto;
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--lf-border);
+}
+
+.lf-modal-qr-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.lf-modal-info-box {
+  background-color: rgba(238, 120, 41, 0.08);
+  border-left: 3px solid var(--lf-primary);
+  padding: 8px 10px;
+  border-radius: 4px;
+}
+
+.lf-modal-address-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background-color: var(--lf-input-bg);
+  border: 1px solid var(--lf-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.lf-modal-inline-copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--lf-text-muted);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.lf-modal-inline-copy-btn:hover {
+  color: var(--lf-primary);
+  background-color: var(--lf-hover-bg);
+}
+
+.lf-modal-inline-copy-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+
+.lf-modal-address-label {
+  font-size: 9px;
+  color: var(--lf-text-muted);
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.lf-modal-address-value {
+  font-family: monospace;
+  font-size: 10px;
+  word-break: break-all;
+  color: var(--lf-text);
+  user-select: all;
+  line-height: 1.3;
+}
+
+.lf-modal-copy-btn {
+  background-color: var(--lf-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--lf-border-radius);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color 0.2s;
+}
+
+.lf-modal-copy-btn:hover {
+  background-color: var(--lf-primary-hover);
+}
+
+.lf-modal-copy-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
 
 
 /* DEV_ONLY_START */
