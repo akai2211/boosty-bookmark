@@ -4,10 +4,6 @@ const { ZipArchive } = require('archiver');
 
 const isFirefox = process.argv.includes('--firefox');
 const TMP_DIR = path.join(__dirname, '.tmp_build');
-const RELEASE_ZIP = path.join(
-  __dirname,
-  isFirefox ? 'boosty-bookmark-firefox-release.zip' : 'boosty-bookmark-release.zip'
-);
 
 // Файлы и папки, которые нужно включить в расширение
 const INCLUDE_PATHS = [
@@ -97,13 +93,32 @@ async function build() {
     }
   }
 
+  // Динамически формируем имя нового архива с версией
+  const zipName = isFirefox 
+    ? `boosty-bookmark-v${version}-firefox-release.zip` 
+    : `boosty-bookmark-v${version}-release.zip`;
+  const RELEASE_ZIP = path.join(__dirname, zipName);
+
   // 1. Очищаем старые следы
   if (fs.existsSync(TMP_DIR)) {
     deleteFolderRecursive(TMP_DIR);
   }
-  if (fs.existsSync(RELEASE_ZIP)) {
-    fs.unlinkSync(RELEASE_ZIP);
-  }
+
+  // Находим и удаляем старые архивы релизов для ТЕКУЩЕЙ платформы в корне проекта
+  fs.readdirSync(__dirname).forEach((file) => {
+    if (file.endsWith('.zip') && file.startsWith('boosty-bookmark-')) {
+      const isFileFirefox = file.includes('-firefox-release.zip');
+      if (isFileFirefox === isFirefox) {
+        const filePath = path.join(__dirname, file);
+        try {
+          fs.unlinkSync(filePath);
+          console.log(`🧹 Удален старый архив: ${file}`);
+        } catch (e) {
+          console.warn(`⚠️ Не удалось удалить файл ${file}:`, e.message);
+        }
+      }
+    }
+  });
 
   fs.mkdirSync(TMP_DIR);
 
