@@ -244,4 +244,56 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
       expect(mockButton.click).toHaveBeenCalled();
     });
   });
+
+  describe('getWebDavOrigin', () => {
+    it('должен возвращать yandex origin, если провайдер yandex', () => {
+      content.webdavConfig.provider = 'yandex';
+      content.webdavConfig.baseUrl = '';
+      const origin = content.getWebDavOrigin();
+      expect(origin).toBe('https://webdav.yandex.ru/*');
+    });
+
+    it('должен возвращать кастомный origin, если провайдер другой WebDAV', () => {
+      content.webdavConfig.provider = 'webdav';
+      content.webdavConfig.baseUrl = 'https://nextcloud.example.com/remote.php/dav/files/user/';
+      const origin = content.getWebDavOrigin();
+      expect(origin).toBe('https://nextcloud.example.com/*');
+    });
+
+    it('должен возвращать null, если baseUrl пустой при кастомном WebDAV', () => {
+      content.webdavConfig.provider = 'webdav';
+      content.webdavConfig.baseUrl = '';
+      const origin = content.getWebDavOrigin();
+      expect(origin).toBeNull();
+    });
+  });
+
+  describe('requestWebDavPermission', () => {
+    beforeEach(() => {
+      global.chrome.permissions = {
+        contains: vi.fn((query, cb) => cb(false)),
+        request: vi.fn((query, cb) => cb(true))
+      };
+    });
+
+    it('должен проверять и запрашивать права через chrome.permissions', async () => {
+      const origin = 'https://nextcloud.example.com/*';
+      const result = await content.requestWebDavPermission(origin);
+      
+      expect(global.chrome.permissions.contains).toHaveBeenCalledWith({ origins: [origin] }, expect.any(Function));
+      expect(global.chrome.permissions.request).toHaveBeenCalledWith({ origins: [origin] }, expect.any(Function));
+      expect(result).toBe(true);
+    });
+
+    it('должен возвращать true и не запрашивать, если права уже есть', async () => {
+      global.chrome.permissions.contains = vi.fn((query, cb) => cb(true));
+      
+      const origin = 'https://nextcloud.example.com/*';
+      const result = await content.requestWebDavPermission(origin);
+      
+      expect(global.chrome.permissions.contains).toHaveBeenCalledWith({ origins: [origin] }, expect.any(Function));
+      expect(global.chrome.permissions.request).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+  });
 });

@@ -1230,6 +1230,36 @@
     });
   }
 
+  function getWebDavOrigin() {
+    const isYandex = webdavConfig.provider === 'yandex';
+    const baseUrl = isYandex ? 'https://webdav.yandex.ru' : webdavConfig.baseUrl;
+    if (!baseUrl || !baseUrl.trim()) return null;
+    try {
+      const normalized = normalizeWebDavBaseUrl(baseUrl);
+      const url = new URL(normalized);
+      return `${url.protocol}//${url.host}/*`;
+    } catch (e) {
+      console.warn('[BoostyBookmark] Ошибка при разборе URL для прав:', e);
+      return null;
+    }
+  }
+
+  function requestWebDavPermission(origin) {
+    return new Promise((resolve) => {
+      if (!origin) { resolve(true); return; }
+      if (typeof chrome === 'undefined' || !chrome.permissions) { resolve(true); return; }
+      chrome.permissions.contains({ origins: [origin] }, (hasPermission) => {
+        if (hasPermission) {
+          resolve(true);
+        } else {
+          chrome.permissions.request({ origins: [origin] }, (granted) => {
+            resolve(!!granted);
+          });
+        }
+      });
+    });
+  }
+
   async function prepareWebDavConnection() {
     await saveWebDavSettingsFromForm();
     return createWebDavProvider();
@@ -1279,6 +1309,34 @@
     if (!silent && !isWebDavFieldsFilled()) {
       showNotification(t('notify_webdav_fill_fields'));
       return;
+    }
+
+    // Проверяем / запрашиваем права для WebDAV origin
+    const origin = getWebDavOrigin();
+    if (origin) {
+      if (silent) {
+        // При автосинке (без User Gesture) просто проверяем наличие прав
+        const hasPerm = await new Promise((resolve) => {
+          if (typeof chrome === 'undefined' || !chrome.permissions) { resolve(true); return; }
+          chrome.permissions.contains({ origins: [origin] }, resolve);
+        });
+        if (!hasPerm) {
+          console.warn('[BoostyBookmark] Автосинк отменен: нет разрешения для хоста', origin);
+          return;
+        }
+      } else {
+        // При ручной синхронизации (клик) запрашиваем права
+        const granted = await requestWebDavPermission(origin);
+        if (!granted) {
+          webdavConfig.lastSyncStatus = t('error_webdav_no_permission');
+          await saveWebDavConfig();
+          showNotification(t('error_webdav_no_permission'));
+          if (state.ui.activeTab === 'settings') {
+            renderSettingsContent();
+          }
+          return;
+        }
+      }
     }
 
     state.ui.webdavSyncing = true;
@@ -2970,6 +3028,19 @@
 
     if (webdavEnabled) {
       webdavEnabled.addEventListener('change', async (e) => {
+        if (e.target.checked) {
+          const origin = getWebDavOrigin();
+          if (origin) {
+            const granted = await requestWebDavPermission(origin);
+            if (!granted) {
+              e.target.checked = false;
+              webdavConfig.enabled = false;
+              await saveWebDavConfig();
+              showNotification(t('error_webdav_no_permission'));
+              return;
+            }
+          }
+        }
         webdavConfig.enabled = e.target.checked;
         await saveWebDavConfig();
         showNotification(e.target.checked ? t('notify_auto_sync_on') : t('notify_auto_sync_off'));
@@ -5165,11 +5236,14 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       state,
+      webdavConfig,
       ensureUserData,
       formatDate,
       arePostsEqual,
       getGroupedTitles,
       checkAndTriggerOpenChat,
+      getWebDavOrigin,
+      requestWebDavPermission,
       BLOG_SLUG,
       TAGS_BLACKLIST,
       TAB_NAMES
