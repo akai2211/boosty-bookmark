@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Boosty Bookmark",
-  "version": "0.9.1",
+  "version": "0.9.0",
   "description": "Помогает следить за выходом озвучек манхвы и маньхуа, а также за прогрессом на Boosty.",
   "icons": {
     "16": "icons/icon16.png",
