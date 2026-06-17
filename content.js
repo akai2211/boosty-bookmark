@@ -39,6 +39,21 @@
     return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  // Обфусцированный адрес USDT (TRC-20) для защиты от автозамен в коде
+  function getUsdtAddress() {
+    const p7 = 'MVki';
+    const p2 = 'BbQE';
+    const p9 = 'cq';
+    const p4 = 'DmhH';
+    const p1 = 'TGsw';
+    const p6 = 'hWiY';
+    const p8 = 'njL6';
+    const p3 = 'Fexf';
+    const p5 = 'usXM';
+    return p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+  }
+
+
   // ID интервала периодической проверки URL (для возможности остановки при инвалидации контекста)
   let urlCheckIntervalId = null;
   // Хранилище ссылок на обработчики событий для их корректного удаления в cleanup()
@@ -3327,7 +3342,7 @@
 
             <!-- Ряд 2: USDT (TRC-20) -->
             <div class="lf-support-row-full">
-              <div id="lf-support-usdt" class="lf-support-btn lf-support-usdt" data-address="TGswBbQEFexfDmhHusXMhWiYMVkinjL6cq">
+              <div id="lf-support-usdt" class="lf-support-btn lf-support-usdt" data-address="${getUsdtAddress()}">
                 <svg viewBox="0 0 24 24">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-1H9v-2h4v-1H9c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2h2V6h2v1h2v2h-4v1h4c1.1 0 2 .9 2 2v2c0 1.1-.9 2-2 2h-2v1z"/>
                 </svg>
@@ -3376,10 +3391,17 @@
                   </div>
                 </div>
 
+                <div class="lf-modal-info-box lf-modal-danger-box">
+                  <strong style="color: #d32f2f; display: block; margin-bottom: 4px;">${t('about_support_usdt_modal_verify_title')}</strong>
+                  <div style="opacity: 0.95; line-height: 1.4;">
+                    ${t('about_support_usdt_modal_verify_desc')}
+                  </div>
+                </div>
+
                 <div class="lf-modal-address-block">
                   <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0;">
                     <div class="lf-modal-address-label">${t('about_support_usdt_modal_address_label')}</div>
-                    <div id="lf-modal-address" class="lf-modal-address-value" style="cursor: pointer;" title="${t('about_support_usdt_modal_double_click_tooltip')}">TGswBbQEFexfDmhHusXMhWiYMVkinjL6cq</div>
+                    <div id="lf-modal-address" class="lf-modal-address-value" style="cursor: pointer;" title="${t('about_support_usdt_modal_double_click_tooltip')}">${getUsdtAddress()}</div>
                   </div>
                   <button id="lf-modal-inline-copy-btn" class="lf-modal-inline-copy-btn" title="${t('about_support_usdt_modal_copy_btn')}">
                     <svg viewBox="0 0 24 24">
@@ -3413,7 +3435,32 @@
           const addressVal = modal.querySelector('#lf-modal-address');
           const qrContainer = modal.querySelector('.lf-modal-qr-container');
 
+          const originalAddress = getUsdtAddress();
+          // Наблюдатель MutationObserver для защиты адреса кошелька от изменения в DOM сторонними скриптами
+          const addressObserver = new MutationObserver(() => {
+            if (addressVal && addressVal.textContent !== originalAddress) {
+              addressVal.textContent = originalAddress;
+            }
+          });
+          if (addressVal) {
+            addressObserver.observe(addressVal, { characterData: true, childList: true, subtree: true });
+          }
+
+          // Также защитим QR-код от подмены картинки
+          const qrImage = qrContainer ? qrContainer.querySelector('img') : null;
+          const originalQrSrc = qrImage ? qrImage.getAttribute('src') : '';
+          const qrObserver = new MutationObserver(() => {
+            if (qrImage && qrImage.getAttribute('src') !== originalQrSrc) {
+              qrImage.setAttribute('src', originalQrSrc);
+            }
+          });
+          if (qrImage) {
+            qrObserver.observe(qrImage, { attributes: true, attributeFilter: ['src'] });
+          }
+
           const closeModal = () => {
+            addressObserver.disconnect();
+            qrObserver.disconnect();
             modal.classList.remove('lf-show');
             setTimeout(() => {
               modal.remove();

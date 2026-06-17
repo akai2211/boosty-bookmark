@@ -1626,6 +1626,11 @@
   border-radius: 4px;
 }
 
+.lf-modal-danger-box {
+  background-color: rgba(211, 47, 47, 0.08);
+  border-left: 3px solid #d32f2f;
+}
+
 .lf-modal-address-block {
   display: flex;
   align-items: center;

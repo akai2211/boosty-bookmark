@@ -379,6 +379,27 @@ test.describe('E2E-тесты расширения Boosty Bookmark', () => {
     await expect(addressElement).toBeVisible();
     await expect(addressElement).toHaveText('TGswBbQEFexfDmhHusXMhWiYMVkinjL6cq');
 
+    // Проверяем наличие предупреждения о сети и красного блока верификации адреса
+    const warningBox = usdtModal.locator('.lf-modal-info-box').first();
+    const dangerBox = usdtModal.locator('.lf-modal-danger-box');
+    await expect(warningBox).toBeVisible();
+    await expect(dangerBox).toBeVisible();
+
+    // Проверяем защиту от подмены адреса в DOM (MutationObserver)
+    await addressElement.evaluate(node => {
+      node.textContent = 'TFakeWalletAddress12345678901234567';
+    });
+    // MutationObserver должен мгновенно вернуть правильный адрес
+    await expect(addressElement).toHaveText('TGswBbQEFexfDmhHusXMhWiYMVkinjL6cq');
+
+    // Проверяем защиту от подмены QR-кода в DOM (MutationObserver)
+    await qrImage.evaluate(node => {
+      node.setAttribute('src', 'data:image/png;base64,fake_qr_code_base64_data');
+    });
+    // MutationObserver должен мгновенно вернуть исходный QR-код
+    const qrSrcAfterTamper = await qrImage.getAttribute('src');
+    expect(qrSrcAfterTamper).toContain('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMYAAADGAQAAAACh4MLw');
+
     // Проверяем наличие надписи "memo не требуется"
     const memoText = usdtModal.locator('text=memo не требуется');
     await expect(memoText).toBeVisible();
