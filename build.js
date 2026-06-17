@@ -48,6 +48,11 @@ function copyFolderRecursiveSync(from, to) {
     if (fs.lstatSync(fromPath).isDirectory()) {
       copyFolderRecursiveSync(fromPath, toPath);
     } else {
+      // Исключаем SVG-файлы из сборки релиза
+      if (element.endsWith('.svg')) {
+        console.log(`🚫 Исключен из сборки: ${path.join(path.basename(from), element)}`);
+        return;
+      }
       fs.copyFileSync(fromPath, toPath);
     }
   });
