@@ -3327,7 +3327,7 @@
 
             <!-- Ряд 2: USDT (TRC-20) -->
             <div class="lf-support-row-full">
-              <div id="lf-support-usdt" class="lf-support-btn lf-support-usdt" data-address="TR7NHqju6E4yfC5A25w9K1AL42M84kj1e8">
+              <div id="lf-support-usdt" class="lf-support-btn lf-support-usdt" data-address="TGswBbQEFexfDmhHusXMhWiYMVkinjL6cq">
                 <svg viewBox="0 0 24 24">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-1H9v-2h4v-1H9c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2h2V6h2v1h2v2h-4v1h4c1.1 0 2 .9 2 2v2c0 1.1-.9 2-2 2h-2v1z"/>
                 </svg>
@@ -3366,7 +3366,7 @@
               </div>
               <div class="lf-modal-body">
                 <div class="lf-modal-qr-container" style="cursor: pointer;" title="${t('about_support_usdt_modal_double_click_tooltip')}">
-                  <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADIAQMAAACXljzdAAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAABj0lEQVRYhdWYMZKDMAxFxVC45AgcxTeLfTQfxUegpGCs/V/yZmd3JzVChUP8UkT460sg8jGKMmQ9cb3ouTesjBGAvOwPYm/Tysusy8XP4GRV7UWwNhnIKtfl2lTrEwjzacgiYe85BHtHVr1Sx4k8gbh2rnRA/FfCWfxR1Y3Eq5EkVyhkb+V3ncYkP8E6ZD7/Ix5hPp0L8jGFoCYPZBWbQCnwvOF+fcmuVd3BQxOkcuzsMuBUTaML9lyDE8vn26+5KrJqrNP7id/Zla5M98i4Pt66jkroyuzYdOUhqdNJeK9HaGKngICuC9wOdThkQ0eR0MTcuU7ng53YquSRCWKzGYldBqeArOB89JDIpGA66qjK5DK3XoMNiUBeqEP2EvM3dsA5gcYn3j98VhYnJThxhcic6VCNqt5LIhMPm+zUgz+NTop9g29witZzV1N8dOKzv3eZOW3AwKd27ib+pOcTvkyFmE8/gZhQ7LnE8pGHEJs6+d5lvN0lMDHt+LsAr8Yx1RSZzGqcT3+2zlkvMvkYX0WCj/izVOdTAAAAAElFTkSuQmCC" alt="USDT QR Code" />
+                  <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMYAAADGAQAAAACh4MLwAAABn0lEQVR4nO2YQYobQQxFX7UavKyGHMBHkW9mfLPqo8wBBtRLg8zPouwwkAmELDJajFbVaPOR9L++uonP47H8IQHfGUABYOF0ScM0C+lZAptLMo3EFU6XSYoK2Fag4YBpf2xwXDg2e6/Q01fmuLbNV7D4KgS/x/p67LDb+3b/EWslbIIVLPbHWY0LXRwVsC2wt9bAOa72drHg0VrbKmBDM8ITNw17fqsAT1G4wpks6JpyV0NDFvoNkEZ2Kfa1K/EyPR2mwVwQfdizhhXqhjQSzz7oI8EC06gxbwtgGqe3qwUWnpBTWb4e2+TpyD4sAM9eZ9cvHO2xcQroyj5OQXZZ1KjbdEfTgQSSgBrzNrmASaZhGrO/2WtgC588VXgCXYBVqZsU/rJGrkBSDX1bgBUSFEi3dh4r+30rwgWyjzlvChLAKTJvLx9i8dxZCqpgC3ha8bkU3KKID/lwZ3XRx6RDDQ153VnHhb4Due4NTlmEC850vOEKrJiGAOD3861t/iikIb/urP3S0bHleslG/kcEf8NTk/iwuQr0tH3/4/qnzE8LUjn+ePnLogAAAABJRU5ErkJggg==" alt="USDT QR Code" />
                 </div>
                 
                 <div class="lf-modal-info-box">
@@ -3379,13 +3379,17 @@
                 <div class="lf-modal-address-block">
                   <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0;">
                     <div class="lf-modal-address-label">${t('about_support_usdt_modal_address_label')}</div>
-                    <div id="lf-modal-address" class="lf-modal-address-value" style="cursor: pointer;" title="${t('about_support_usdt_modal_double_click_tooltip')}">TR7NHqju6E4yfC5A25w9K1AL42M84kj1e8</div>
+                    <div id="lf-modal-address" class="lf-modal-address-value" style="cursor: pointer;" title="${t('about_support_usdt_modal_double_click_tooltip')}">TGswBbQEFexfDmhHusXMhWiYMVkinjL6cq</div>
                   </div>
                   <button id="lf-modal-inline-copy-btn" class="lf-modal-inline-copy-btn" title="${t('about_support_usdt_modal_copy_btn')}">
                     <svg viewBox="0 0 24 24">
                       <path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"/>
                     </svg>
                   </button>
+                </div>
+
+                <div style="font-size: 10px; color: var(--lf-text-muted); text-align: center; margin-top: -4px;">
+                  ${t('about_support_usdt_modal_memo_not_required')}
                 </div>
 
                 <button id="lf-modal-copy-btn" class="lf-modal-copy-btn">

@@ -338,4 +338,56 @@ test.describe('E2E-тесты расширения Boosty Bookmark', () => {
     const startSyncBtn = page.locator('#lf-empty-sync-btn');
     await expect(startSyncBtn).toBeVisible();
   });
+
+  test('Отображение модального окна USDT и QR-кода', async () => {
+    await page.goto('https://boosty.to/lightfoxmanga');
+    await page.click('#lf-trigger-btn');
+
+    // Переходим в настройки
+    await page.click('#lf-settings-btn');
+
+    // Переходим во вкладку "О расширении"
+    const aboutBtn = page.locator('#lf-about-btn');
+    await expect(aboutBtn).toBeVisible();
+    await aboutBtn.click();
+
+    // Кликаем по кнопке поддержки USDT
+    const usdtBtn = page.locator('#lf-support-usdt');
+    await expect(usdtBtn).toBeVisible();
+    await usdtBtn.click();
+
+    // Проверяем открытие модального окна
+    const usdtModal = page.locator('#lf-usdt-modal');
+    await expect(usdtModal).toBeVisible();
+    await expect(usdtModal).toHaveClass(/lf-show/);
+
+    // Проверяем наличие контейнера QR-кода и изображение внутри
+    const qrContainer = usdtModal.locator('.lf-modal-qr-container');
+    await expect(qrContainer).toBeVisible();
+
+    const qrImage = qrContainer.locator('img');
+    await expect(qrImage).toBeVisible();
+    
+    // Проверяем валидность src изображения (должен содержать полный base64 QR-кода)
+    const qrSrc = await qrImage.getAttribute('src');
+    expect(qrSrc).not.toBeNull();
+    expect(qrSrc).toContain('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMYAAADGAQAAAACh4MLw');
+    expect(qrSrc?.replace(/\s/g, '').length).toBe(654);
+
+    // Проверяем отображение адреса кошелька
+    const addressElement = usdtModal.locator('#lf-modal-address');
+    await expect(addressElement).toBeVisible();
+    await expect(addressElement).toHaveText('TGswBbQEFexfDmhHusXMhWiYMVkinjL6cq');
+
+    // Проверяем наличие надписи "memo не требуется"
+    const memoText = usdtModal.locator('text=memo не требуется');
+    await expect(memoText).toBeVisible();
+
+    // Закрываем модальное окно
+    const closeBtn = usdtModal.locator('#lf-modal-close-btn');
+    await closeBtn.click();
+
+    // Убеждаемся, что окно исчезло из DOM
+    await expect(usdtModal).not.toBeVisible();
+  });
 });

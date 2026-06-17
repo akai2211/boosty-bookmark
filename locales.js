@@ -183,6 +183,7 @@
       about_support_usdt_modal_address_label: 'Адрес USDT (TRC-20)',
       about_support_usdt_modal_copy_btn: 'Скопировать адрес',
       about_support_usdt_modal_double_click_tooltip: 'Двойной клик для копирования',
+      about_support_usdt_modal_memo_not_required: 'memo не требуется',
 
 
 
@@ -415,6 +416,7 @@
       about_support_usdt_modal_address_label: 'USDT (TRC-20) Address',
       about_support_usdt_modal_copy_btn: 'Copy Address',
       about_support_usdt_modal_double_click_tooltip: 'Double click to copy',
+      about_support_usdt_modal_memo_not_required: 'memo is not required',
 
 
 
