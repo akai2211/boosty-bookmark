@@ -78,6 +78,23 @@
       urlCheckIntervalId = null;
     }
     
+    /* DEV_ONLY_START */
+    if (devReactionsIntervalId) {
+      clearInterval(devReactionsIntervalId);
+      devReactionsIntervalId = null;
+    }
+    window.removeEventListener('mouseleave', handleReactionLeave, true);
+    window.removeEventListener('mouseout', handleReactionLeave, true);
+    window.removeEventListener('pointerleave', handleReactionLeave, true);
+    window.removeEventListener('pointerout', handleReactionLeave, true);
+    window.removeEventListener('click', handleGlobalClick, true);
+    window.removeEventListener('scroll', handleDevScroll, { passive: true });
+    if (devScrollTimeout) {
+      clearTimeout(devScrollTimeout);
+      devScrollTimeout = null;
+    }
+    /* DEV_ONLY_END */
+    
     // Удаляем слушатели событий
     if (eventHandlers.popstate) window.removeEventListener('popstate', eventHandlers.popstate);
     if (eventHandlers.hashchange) window.removeEventListener('hashchange', eventHandlers.hashchange);
@@ -3171,7 +3188,8 @@
             if (typeof devSettings !== 'undefined') {
               devSettings.enabled = false;
               devSettings.cutoffDate = '';
-              devSettings.hideAboutAuthor = false;
+              devSettings.hideAboutAuthor = true;
+              devSettings.alwaysShowReactions = true;
               applyDevSettingsEffects();
             }
 
@@ -5013,7 +5031,8 @@
   let devSettings = {
     enabled: false,
     cutoffDate: '',
-    hideAboutAuthor: false
+    hideAboutAuthor: true,
+    alwaysShowReactions: true
   };
 
   function loadDevSettings() {
@@ -5023,9 +5042,10 @@
         chrome.storage.local.get(['lf_dev_settings'], (res) => {
           if (chrome.runtime.lastError) { resolve(); return; }
           const saved = res['lf_dev_settings'] || {};
-          devSettings.enabled = !!saved.enabled;
+          devSettings.enabled = saved.enabled !== undefined ? !!saved.enabled : false;
           devSettings.cutoffDate = saved.cutoffDate || '';
-          devSettings.hideAboutAuthor = !!saved.hideAboutAuthor;
+          devSettings.hideAboutAuthor = saved.hideAboutAuthor !== undefined ? !!saved.hideAboutAuthor : true;
+          devSettings.alwaysShowReactions = saved.alwaysShowReactions !== undefined ? !!saved.alwaysShowReactions : true;
           resolve();
         });
       } catch (e) {
@@ -5048,12 +5068,193 @@
   }
 
   let devSidebarOpen = false;
+  let devReactionsIntervalId = null;
+
+  function isReactionElement(el) {
+    if (!el) return false;
+    let current = el;
+    while (current && current !== document.body) {
+      if (current.getAttribute && current.getAttribute('data-test-id') === 'COMMON_REACTIONS_REACTIONSPOST:ROOT') {
+        return true;
+      }
+      if (current.classList && (
+        Array.from(current.classList).some(cls => 
+          cls.includes('ReactionSelector') || 
+          cls.includes('TooltipContent') || 
+          cls.includes('ReactionsPost') || 
+          cls.includes('ReactionButton') ||
+          cls.includes('Reaction')
+        )
+      )) {
+        return true;
+      }
+      if (current.getAttribute && current.getAttribute('role') === 'tooltip') {
+        return true;
+      }
+      current = current.parentElement;
+    }
+    return false;
+  }
+
+  function handleReactionLeave(e) {
+    if (typeof devSettings !== 'undefined' && devSettings.alwaysShowReactions) {
+      if (isReactionElement(e.target) || isReactionElement(e.relatedTarget) || e.relatedTarget === null || e.toElement === null) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      }
+    }
+  }
+
+  function handleGlobalClick(e) {
+    if (typeof devSettings !== 'undefined' && devSettings.alwaysShowReactions) {
+      setTimeout(autoOpenReactions, 150);
+    }
+  }
+
+  let devScrollTimeout = null;
+
+  function handleDevScroll() {
+    if (typeof devSettings !== 'undefined' && devSettings.alwaysShowReactions) {
+      if (devScrollTimeout) clearTimeout(devScrollTimeout);
+      devScrollTimeout = setTimeout(autoOpenReactions, 150);
+    }
+  }
+
+  function isPopoverOpenForBtn(btn) {
+    // 1. Проверка по aria-describedby
+    const popoverHolder = btn.hasAttribute('aria-describedby') ? btn : btn.querySelector('[aria-describedby]');
+    const popoverId = popoverHolder ? popoverHolder.getAttribute('aria-describedby') : null;
+    if (popoverId && document.getElementById(popoverId)) {
+      return true;
+    }
+
+    // 2. Геометрическая проверка (поиск по близости открытого попапа в DOM)
+    const popover = document.querySelector('[class*="ReactionSelector"], [class*="TooltipContent"]');
+    if (!popover) return false;
+
+    const btnRect = btn.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+
+    const btnCenterX = btnRect.left + btnRect.width / 2;
+    const popoverCenterX = popoverRect.left + popoverRect.width / 2;
+    const distanceX = Math.abs(btnCenterX - popoverCenterX);
+
+    // Если попап по горизонтали близко (в пределах 150px) и по вертикали рядом (в пределах 120px)
+    if (distanceX < 150 && Math.abs(btnRect.top - popoverRect.bottom) < 120) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function autoOpenReactions() {
+    if (typeof devSettings === 'undefined' || !devSettings.alwaysShowReactions) return;
+
+    const reactionBtns = Array.from(document.querySelectorAll('[data-test-id="COMMON_REACTIONS_REACTIONSPOST:ROOT"]'));
+    if (reactionBtns.length === 0) return;
+
+    let bestBtn = null;
+    let minDistance = Infinity;
+    const centerY = window.innerHeight / 2;
+
+    reactionBtns.forEach(btn => {
+      const rect = btn.getBoundingClientRect();
+      if (rect.top < window.innerHeight && rect.bottom > 0) {
+        const btnCenterY = rect.top + rect.height / 2;
+        const distance = Math.abs(btnCenterY - centerY);
+        if (distance < minDistance) {
+          minDistance = distance;
+          bestBtn = btn;
+        }
+      }
+    });
+
+    if (bestBtn) {
+      const isOpen = isPopoverOpenForBtn(bestBtn);
+
+      if (!isOpen) {
+        // Мягко закрываем другие поповеры на странице
+        reactionBtns.forEach(btn => {
+          if (btn !== bestBtn) {
+            const evt = new MouseEvent('mouseleave', {
+              bubbles: true,
+              cancelable: true,
+              view: window
+            });
+            btn.dispatchEvent(evt);
+          }
+        });
+
+        // Открываем активный поповер
+        const events = ['pointerenter', 'pointerover', 'mouseenter', 'mouseover'];
+        events.forEach(evtName => {
+          const evt = new MouseEvent(evtName, {
+            bubbles: true,
+            cancelable: true,
+            view: window
+          });
+          bestBtn.dispatchEvent(evt);
+        });
+      }
+    }
+  }
 
   function applyDevSettingsEffects() {
     if (devSettings.hideAboutAuthor) {
       document.body.classList.add('lf-dev-hide-about-author');
     } else {
       document.body.classList.remove('lf-dev-hide-about-author');
+    }
+
+    if (devSettings.alwaysShowReactions) {
+      document.body.classList.add('lf-dev-always-show-reactions');
+      
+      window.removeEventListener('mouseleave', handleReactionLeave, true);
+      window.removeEventListener('mouseout', handleReactionLeave, true);
+      window.removeEventListener('pointerleave', handleReactionLeave, true);
+      window.removeEventListener('pointerout', handleReactionLeave, true);
+      window.removeEventListener('click', handleGlobalClick, true);
+      window.removeEventListener('scroll', handleDevScroll, { passive: true });
+      
+      window.addEventListener('mouseleave', handleReactionLeave, true);
+      window.addEventListener('mouseout', handleReactionLeave, true);
+      window.addEventListener('pointerleave', handleReactionLeave, true);
+      window.addEventListener('pointerout', handleReactionLeave, true);
+      window.addEventListener('click', handleGlobalClick, true);
+      window.addEventListener('scroll', handleDevScroll, { passive: true });
+
+      if (!devReactionsIntervalId) {
+        devReactionsIntervalId = setInterval(autoOpenReactions, 1000);
+      }
+      autoOpenReactions();
+    } else {
+      document.body.classList.remove('lf-dev-always-show-reactions');
+      
+      if (devReactionsIntervalId) {
+        clearInterval(devReactionsIntervalId);
+        devReactionsIntervalId = null;
+      }
+      
+      window.removeEventListener('mouseleave', handleReactionLeave, true);
+      window.removeEventListener('mouseout', handleReactionLeave, true);
+      window.removeEventListener('pointerleave', handleReactionLeave, true);
+      window.removeEventListener('pointerout', handleReactionLeave, true);
+      window.removeEventListener('click', handleGlobalClick, true);
+      window.removeEventListener('scroll', handleDevScroll, { passive: true });
+      
+      if (devScrollTimeout) {
+        clearTimeout(devScrollTimeout);
+        devScrollTimeout = null;
+      }
+
+      document.querySelectorAll('[data-test-id="COMMON_REACTIONS_REACTIONSPOST:ROOT"]').forEach(btn => {
+        const evt = new MouseEvent('mouseleave', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        });
+        btn.dispatchEvent(evt);
+      });
     }
   }
 
@@ -5147,6 +5348,12 @@
               Скрыть блок «Об авторе»
             </label>
           </div>
+          <div class="lf-dev-row" style="margin-top: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="lf-dev-always-show-reactions" ${devSettings.alwaysShowReactions ? 'checked' : ''}>
+              Всегда раскрывать лайки (меню реакций)
+            </label>
+          </div>
           <button id="lf-dev-save-btn" class="lf-dev-btn">Сохранить настройки</button>
         </div>
 
@@ -5171,10 +5378,12 @@
       const enabledCheckbox = document.getElementById('lf-dev-enabled');
       const cutoffInput = document.getElementById('lf-dev-cutoff-date');
       const hideAboutAuthorCheckbox = document.getElementById('lf-dev-hide-about-author');
+      const alwaysShowReactionsCheckbox = document.getElementById('lf-dev-always-show-reactions');
       
       devSettings.enabled = enabledCheckbox.checked;
       devSettings.cutoffDate = cutoffInput.value;
       devSettings.hideAboutAuthor = hideAboutAuthorCheckbox.checked;
+      devSettings.alwaysShowReactions = alwaysShowReactionsCheckbox.checked;
       
       if (devSettings.enabled && devSettings.cutoffDate) {
         const cutoffTimeMs = new Date(devSettings.cutoffDate).getTime();

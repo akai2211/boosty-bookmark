@@ -1920,4 +1920,13 @@
 body.lf-dev-hide-about-author [class*="AboutAuthor-scss--module_content_"] {
   display: none !important;
 }
+
+body.lf-dev-always-show-reactions [class*="ReactionSelector"],
+body.lf-dev-always-show-reactions [class*="TooltipContent"] {
+  transition: none !important;
+  animation: none !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
 /* DEV_ONLY_END */
