@@ -125,6 +125,7 @@
 
     lastScrolledUrl = null;
     lastScrolledPostId = null;
+    lastProcessedTagParam = null;
 
     try {
       sessionStorage.removeItem('lf_active_title');
@@ -146,6 +147,7 @@
     newChapters: [],     // Имена тайтлов с новыми главами
     settings: {
       syncLikes: true,   // Учитывать лайки как просмотренное
+      syncTitleFromUrl: true, // Автоматический переход к тайтлу при выборе тега на Boosty
       autoMarkOpen: false, // Автоматически помечать главу как прочитанную при открытии
       savePlayerTime: true, // Сохранять и восстанавливать время видео/аудио
       forceVideoQuality: false, // Принудительное качество видео
@@ -165,7 +167,7 @@
       previousTab: 'favorite', // Запоминает предыдущую вкладку перед переходом в настройки
       searchQuery: '',
       activeTitle: null,     // Название тайтла, открытого в детальном виде (null = список)
-      sortAsc: true,         // Сортировка глав: true - сначала старые (1-10, 11-20), false - новые
+      sortAsc: false,        // Сортировка глав: true - сначала старые (1-10, 11-20), false - новые
       isSyncing: false,      // Флаг активного процесса загрузки всей базы
       syncProgress: 0,
       tabOrderExpanded: false, // По умолчанию свернут порядок вкладок
@@ -203,6 +205,7 @@
 
   let lastScrolledUrl = null;
   let lastScrolledPostId = null;
+  let lastProcessedTagParam = null;
 
   // Вспомогательная функция проверки наличия хэша поста в URL
   function hasPostHash() {
@@ -380,6 +383,61 @@
     }, 500);
   }
 
+  // Автоматический переход на детальный вид тайтла при изменении URL страницы
+  function syncActiveTitleFromUrl() {
+    if (!state.settings.syncTitleFromUrl) return;
+    if (!isTargetPage()) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const tagParam = urlParams.get('postsTagsIds') || urlParams.get('tag') || null;
+
+    if (tagParam === lastProcessedTagParam) {
+      return;
+    }
+
+    const previousTagParam = lastProcessedTagParam;
+    lastProcessedTagParam = tagParam;
+
+    if (tagParam) {
+      const allTitles = getGroupedTitles();
+      
+      // 1. Попытка сопоставить по tagId
+      let matchedTitle = allTitles.find(t => t.tagId && String(t.tagId) === String(tagParam));
+      
+      // 2. Если не нашли, пробуем сопоставить по имени (декодированному из URL)
+      if (!matchedTitle) {
+        try {
+          const decodedTag = decodeURIComponent(tagParam).trim().toLowerCase();
+          matchedTitle = allTitles.find(t => t.name.trim().toLowerCase() === decodedTag);
+        } catch (e) {
+          // Игнорируем ошибки декодирования
+        }
+      }
+      
+      if (matchedTitle) {
+        if (state.ui.activeTitle !== matchedTitle.name) {
+          console.log(`[Boosty Bookmark] Автоматическое переключение на тайтл: "${matchedTitle.name}" (найден по тегу ${tagParam})`);
+          state.ui.activeTitle = matchedTitle.name;
+          try {
+            sessionStorage.setItem('lf_active_title', matchedTitle.name);
+          } catch (e) {}
+          render();
+        }
+      }
+    } else {
+      // tagParam === null, но previousTagParam !== null
+      // Это означает переход с конкретного тега на общую ленту
+      if (previousTagParam !== null && state.ui.activeTitle !== null) {
+        console.log(`[Boosty Bookmark] Сброс активного тайтла при переходе на общую ленту`);
+        state.ui.activeTitle = null;
+        try {
+          sessionStorage.setItem('lf_active_title', '');
+        } catch (e) {}
+        render();
+      }
+    }
+  }
+
   // Управление видимостью интерфейса в зависимости от URL
   async function checkUrlAndToggleVisibility() {
     checkAndTriggerOpenChat();
@@ -431,7 +489,9 @@
         }
         /* DEV_ONLY_END */
       }
+      syncActiveTitleFromUrl();
     } else {
+      lastProcessedTagParam = null;
       // Скрываем интерфейс, если мы ушли на другую страницу
       if (btn) btn.style.display = 'none';
       if (sidebar) {
@@ -2957,6 +3017,14 @@
           </div>
 
           <div class="lf-settings-row">
+            <label class="lf-settings-label" for="lf-setting-sync-title-from-url">
+              ${t('settings_sync_title_from_url_label')}
+              <div class="lf-settings-desc">${t('settings_sync_title_from_url_desc')}</div>
+            </label>
+            <input type="checkbox" id="lf-setting-sync-title-from-url" class="lf-settings-checkbox" ${state.settings.syncTitleFromUrl ? 'checked' : ''}>
+          </div>
+
+          <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-open-titles">
               ${t('settings_open_titles_label')}
               <div class="lf-settings-desc">${t('settings_open_titles_desc')}</div>
@@ -3270,6 +3338,7 @@
             state.blogDescriptionLinks = [];
             state.settings = {
               syncLikes: true,
+              syncTitleFromUrl: true,
               autoMarkOpen: false,
               tabOrder: ['favorite', 'new', 'watching', 'all', 'completed', 'dropped'],
               zoom: 1.25,
@@ -3332,6 +3401,15 @@
       saveStateToStorage();
       showNotification(e.target.checked ? t('notify_sync_likes_on') : t('notify_sync_likes_off'));
     });
+
+    const syncTitleFromUrlCheckbox = document.getElementById('lf-setting-sync-title-from-url');
+    if (syncTitleFromUrlCheckbox) {
+      syncTitleFromUrlCheckbox.addEventListener('change', (e) => {
+        state.settings.syncTitleFromUrl = e.target.checked;
+        saveStateToStorage();
+        showNotification(e.target.checked ? t('notify_sync_title_from_url_on') : t('notify_sync_title_from_url_off'));
+      });
+    }
 
     const autoMarkCheckbox = document.getElementById('lf-setting-auto-mark');
     autoMarkCheckbox.addEventListener('change', (e) => {
@@ -4652,6 +4730,7 @@
         }
         
         userData.readPosts = readPosts;
+        userData.updatedAt = Date.now();
         saveStateToStorage();
         
         // Отправляем прямой запрос на обновление лайка на сервере Boosty
@@ -5524,6 +5603,7 @@
       arePostsEqual,
       getGroupedTitles,
       checkAndTriggerOpenChat,
+      syncActiveTitleFromUrl,
       getWebDavOrigin,
       requestWebDavPermission,
       BLOG_SLUG,

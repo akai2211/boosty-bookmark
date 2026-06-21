@@ -296,4 +296,97 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
       expect(result).toBe(true);
     });
   });
+
+  describe('syncActiveTitleFromUrl', () => {
+    let originalWindow;
+
+    beforeEach(() => {
+      originalWindow = global.window;
+      content.state.ui = { activeTitle: null };
+      content.state.blogDescriptionLinks = [];
+      content.state.settings = { syncTitleFromUrl: true };
+      content.state.posts = [
+        { id: '1', title: 'Глава 1', publishTime: 100, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: false }
+      ];
+    });
+
+    afterEach(() => {
+      global.window = originalWindow;
+    });
+
+    it('не должен переключать activeTitle, если опция syncTitleFromUrl отключена в настройках', () => {
+      content.state.settings.syncTitleFromUrl = false;
+      global.window = {
+        location: {
+          pathname: '/lightfoxmanga',
+          search: '?postsTagsIds=tag-1'
+        }
+      };
+
+      content.syncActiveTitleFromUrl();
+      expect(content.state.ui.activeTitle).toBeNull();
+    });
+
+    it('должен переключать activeTitle на название тайтла, если в URL есть postsTagsIds, соответствующий tagId', () => {
+      global.window = {
+        location: {
+          pathname: '/lightfoxmanga',
+          search: '?postsTagsIds=tag-1'
+        }
+      };
+
+      content.syncActiveTitleFromUrl();
+      expect(content.state.ui.activeTitle).toBe('Реинкарнация');
+      expect(sessionStorage.setItem).toHaveBeenCalledWith('lf_active_title', 'Реинкарнация');
+    });
+
+    it('должен переключать activeTitle на название тайтла по имени (декодированному из URL), если tagId не найден', () => {
+      global.window = {
+        location: {
+          pathname: '/lightfoxmanga',
+          search: '?tag=%D0%A0%D0%B5%D0%B8%D0%BD%D0%BA%D0%B0%D1%80%D0%BD%D0%B0%D1%86%D0%B8%D1%8F' // "Реинкарнация"
+        }
+      };
+
+      content.syncActiveTitleFromUrl();
+      expect(content.state.ui.activeTitle).toBe('Реинкарнация');
+    });
+
+    it('должен сбрасывать activeTitle на null при переходе с тега на общую ленту (когда tagParam становится null, а до этого был не null)', () => {
+      global.window = {
+        location: {
+          pathname: '/lightfoxmanga',
+          search: '?postsTagsIds=tag-1'
+        }
+      };
+      content.state.ui.activeTitle = 'Реинкарнация';
+      content.syncActiveTitleFromUrl(); // Установит lastProcessedTagParam = 'tag-1'
+
+      // Теперь переходим на общую ленту без параметров тегов
+      global.window.location.search = '';
+      content.syncActiveTitleFromUrl();
+
+      expect(content.state.ui.activeTitle).toBeNull();
+      expect(sessionStorage.setItem).toHaveBeenCalledWith('lf_active_title', '');
+    });
+
+    it('не должен менять activeTitle при ручной навигации в сайдбаре, если URL не менялся', () => {
+      global.window = {
+        location: {
+          pathname: '/lightfoxmanga',
+          search: '?postsTagsIds=tag-1'
+        }
+      };
+      
+      content.syncActiveTitleFromUrl(); // Установит activeTitle = 'Реинкарнация' и lastProcessedTagParam = 'tag-1'
+      expect(content.state.ui.activeTitle).toBe('Реинкарнация');
+
+      // Симулируем ручной выход пользователя на главный экран в сайдбаре (activeTitle = null)
+      content.state.ui.activeTitle = null;
+
+      // Вызов syncActiveTitleFromUrl не должен вернуть "Реинкарнация", так как tagParam не изменился
+      content.syncActiveTitleFromUrl();
+      expect(content.state.ui.activeTitle).toBeNull();
+    });
+  });
 });
