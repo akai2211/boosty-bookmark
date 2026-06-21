@@ -266,7 +266,10 @@ test.describe('E2E-тесты расширения Boosty Bookmark', () => {
     await page.click('#lf-trigger-btn');
 
     // Включаем эмуляцию даты и ставим отсечку на 2026-05-10 (постов от 15 мая еще нет в выборке)
-    await page.click('#lf-dev-trigger-btn');
+    const devBtn = page.locator('#lf-dev-trigger-btn');
+    if (await devBtn.isVisible()) {
+      await devBtn.click();
+    }
     await page.locator('#lf-dev-enabled').check();
     await page.locator('#lf-dev-cutoff-date').fill('2026-05-10');
     await page.click('#lf-dev-save-btn');

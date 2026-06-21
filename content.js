@@ -116,6 +116,13 @@
     if (btn) btn.remove();
     if (sidebar) sidebar.remove();
 
+    /* DEV_ONLY_START */
+    const devBtn = document.getElementById('lf-dev-trigger-btn');
+    const devSidebar = document.getElementById('lf-dev-sidebar');
+    if (devBtn) devBtn.remove();
+    if (devSidebar) devSidebar.remove();
+    /* DEV_ONLY_END */
+
     lastScrolledUrl = null;
     lastScrolledPostId = null;
 
@@ -414,7 +421,14 @@
         sidebar.style.display = '';
         /* DEV_ONLY_START */
         if (devBtn) devBtn.style.display = devSidebarOpen ? 'none' : '';
-        if (devSidebar) devSidebar.style.display = '';
+        if (devSidebar) {
+          devSidebar.style.display = '';
+          if (devSidebarOpen) {
+            devSidebar.classList.add('lf-open');
+          } else {
+            devSidebar.classList.remove('lf-open');
+          }
+        }
         /* DEV_ONLY_END */
       }
     } else {
@@ -433,7 +447,6 @@
       if (devSidebar) {
         devSidebar.style.display = 'none';
         devSidebar.classList.remove('lf-open');
-        devSidebarOpen = false;
       }
       /* DEV_ONLY_END */
     }
@@ -5067,7 +5080,7 @@
     });
   }
 
-  let devSidebarOpen = false;
+  let devSidebarOpen = true;
   let devReactionsIntervalId = null;
 
   function isReactionElement(el) {
@@ -5271,6 +5284,9 @@
     btn.id = 'lf-dev-trigger-btn';
     btn.title = 'DevTools - Панель разработчика';
     btn.innerHTML = '🛠️';
+    if (devSidebarOpen) {
+      btn.style.display = 'none';
+    }
 
     btn.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -5296,6 +5312,9 @@
     const devSidebar = document.createElement('div');
     devSidebar.id = 'lf-dev-sidebar';
     devSidebar.className = 'lf-dark';
+    if (devSidebarOpen) {
+      devSidebar.classList.add('lf-open');
+    }
 
     devSidebar.addEventListener('click', (event) => {
       event.stopPropagation();
