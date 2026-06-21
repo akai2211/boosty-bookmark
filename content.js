@@ -515,6 +515,60 @@
       
       console.log(`[BoostyBookmark] Перехвачен лайк на Boosty: пост ${postId} — кэш обновлён`);
     }
+
+    // ==========================================================================
+    // Направление 2: двусторонняя проверка рассинхрона при действии пользователя.
+    // Срабатывает только при реальном лайке/дизлайке (пользователь нажал на лайк).
+    // Покрывает случай: расширение было выключено в момент лайка — кэш устарел.
+    // ==========================================================================
+    const postIdStr = String(postId);
+    const syncCheckbox = document.querySelector(`.lf-chapter-checkbox[data-post-id="${postIdStr}"]`);
+    if (!syncCheckbox) return; // Чекбокс не в DOM — нечего синхронизировать
+
+    if (!isLiked) {
+      // Пользователь снял лайк → убираем класс lf-liked-checkbox
+      if (syncCheckbox.classList.contains('lf-liked-checkbox')) {
+        syncCheckbox.classList.remove('lf-liked-checkbox');
+      }
+      // Если чекбокс checked, но пост НЕ в readPosts — он был checked только через isLiked.
+      // Снимаем чекбокс (лайк снят → не просмотрено).
+      if (syncCheckbox.checked) {
+        const allGrouped = getGroupedTitles();
+        const parentTitle = allGrouped.find(manga => manga.posts.some(p => String(p.id) === postIdStr));
+        if (parentTitle) {
+          const userData = state.user_data[parentTitle.name];
+          const readPosts = (userData && userData.readPosts) || [];
+          if (!readPosts.includes(postIdStr)) {
+            syncCheckbox.checked = false;
+            console.log(`[BoostyBookmark] Рассинхрон (Направление 2, дизлайк): чекбокс снят для поста ${postId} (не был в readPosts)`);
+            const updatedManga = getGroupedTitles().find(t => t.name === parentTitle.name);
+            if (updatedManga) {
+              const headerLabel = document.querySelector('.lf-chapters-header .lf-field-label');
+              if (headerLabel) {
+                headerLabel.textContent = t('detail_chapters_count_label', updatedManga.readCount, updatedManga.posts.length);
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Пользователь поставил лайк → чекбокс должен быть checked
+      if (!syncCheckbox.checked) {
+        console.log(`[BoostyBookmark] Рассинхрон (Направление 2, лайк): ставим чекбокс для поста ${postId}`);
+        syncCheckbox.checked = true;
+        syncCheckbox.classList.add('lf-liked-checkbox');
+        const activeTitleName = state.ui.activeTitle;
+        if (activeTitleName) {
+          const updatedManga = getGroupedTitles().find(t => t.name === activeTitleName);
+          if (updatedManga) {
+            const headerLabel = document.querySelector('.lf-chapters-header .lf-field-label');
+            if (headerLabel) {
+              headerLabel.textContent = t('detail_chapters_count_label', updatedManga.readCount, updatedManga.posts.length);
+            }
+          }
+        }
+      }
+    }
   }
 
   // Перехват истории переходов SPA (React Router / HTML5 History API)

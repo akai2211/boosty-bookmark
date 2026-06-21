@@ -1,6 +1,7 @@
 // page_script.js — работает в main world страницы Boosty
 // 1. Перехватывает fetch и XMLHttpRequest запросы к /reaction для мгновенной синхронизации лайков
 // 2. Обрабатывает программные клики по кнопке реакции для обратной синхронизации (расширение → Boosty DOM)
+// 3. Двусторонняя проверка рассинхрона: при действии пользователя сверяет счётчик лайков с ожиданием
 (function () {
   'use strict';
 
@@ -130,20 +131,36 @@
   }
 
   /**
-   * Ожидание появления popover с выбором реакций.
+   * Ожидание появления popover с выбором реакций поста (не комментария).
+   * Сначала ищет напрямую по классу ReactionSelector, затем через img[src*="heart"],
+   * явно исключая элементы внутри блоков реакций комментариев (ReactionsComment).
    */
   function waitForReactionPopover(timeout) {
     return new Promise((resolve) => {
       const check = () => {
+        // Приоритетный поиск: ищем контейнер поповера напрямую по классу ReactionSelector
+        // Исключаем элементы внутри ReactionsComment (реакции на комментарии)
+        const selectors = document.querySelectorAll('[class*="ReactionSelector"]');
+        for (const el of selectors) {
+          if (!el.closest('[class*="ReactionsComment"]')) {
+            return el;
+          }
+        }
+
+        // Запасной поиск через изображения сердечка
         const imgs = document.querySelectorAll('img[src*="heart"]');
         for (const img of imgs) {
+          // Исключаем сердечки внутри кнопки реакции (это уже применённые реакции)
           const inButton = img.closest('[data-test-id="COMMON_REACTIONS_REACTIONSPOST:ROOT"]');
-          if (!inButton) {
-            const container = img.closest('[role="tooltip"], [class*="TooltipContent"], [class*="ReactionSelector"], [class*="Menu"]');
-            if (container) return container;
-            const parent = img.parentElement && img.parentElement.parentElement;
-            if (parent && parent.querySelectorAll('img').length >= 3) return parent;
-          }
+          if (inButton) continue;
+          // Исключаем сердечки в блоках реакций комментариев
+          const inComment = img.closest('[class*="ReactionsComment"]');
+          if (inComment) continue;
+
+          const container = img.closest('[role="tooltip"], [class*="TooltipContent"], [class*="ReactionSelector"], [class*="Menu"]');
+          if (container) return container;
+          const parent = img.parentElement && img.parentElement.parentElement;
+          if (parent && parent.querySelectorAll('img').length >= 3) return parent;
         }
         return null;
       };
@@ -168,8 +185,54 @@
   }
 
   /**
+   * Возвращает текущий счётчик лайков из кнопки реакции.
+   * Читает первый числовой текстовый узел внутри кнопки.
+   * Возвращает null, если счётчик не найден или не является числом.
+   */
+  function getLikeCount(reactionBtn) {
+    if (!reactionBtn) return null;
+    // Ищем числовой текст внутри кнопки (текстовые узлы и span'ы)
+    const walker = document.createTreeWalker(reactionBtn, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const val = parseInt(node.nodeValue.trim(), 10);
+      if (!isNaN(val)) return val;
+    }
+    return null;
+  }
+
+  /**
+   * Диспатчит полную последовательность pointer-событий на элемент.
+   * React/Radix UI игнорирует голый click() — ему нужны pointerdown + pointerup + click
+   * с реальными координатами центра элемента.
+   */
+  function fireClick(el) {
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const opts = {
+      bubbles: true, cancelable: true, view: window,
+      clientX: cx, clientY: cy, screenX: cx, screenY: cy,
+      buttons: 1, button: 0
+    };
+    el.dispatchEvent(new PointerEvent('pointerover', opts));
+    el.dispatchEvent(new MouseEvent('mouseover', opts));
+    el.dispatchEvent(new PointerEvent('pointerenter', opts));
+    el.dispatchEvent(new PointerEvent('pointerdown', opts));
+    el.dispatchEvent(new MouseEvent('mousedown', opts));
+    el.dispatchEvent(new PointerEvent('pointerup', opts));
+    el.dispatchEvent(new MouseEvent('mouseup', opts));
+    el.dispatchEvent(new MouseEvent('click', opts));
+  }
+
+  /**
    * Обновляет визуальное состояние лайка через нативный React-клик.
    * На Boosty постановка и снятие лайка делается одинаково: клик по кнопке, затем клик по сердечку.
+   * Используем fireClick вместо .click(), так как React/Radix Popover игнорирует синтетические click().
+   *
+   * Двусторонняя проверка рассинхрона (Направление 1 — чекбокс → лайк):
+   * После клика сравниваем счётчик лайков до и после. Если счётчик изменился не в ту сторону
+   * (например, должен был вырасти, а упал) — делаем один повторный клик для досинхронизации.
    */
   async function simulateReaction(postId, shouldLike) {
     try {
@@ -179,12 +242,15 @@
         return;
       }
 
+      // Считываем счётчик лайков ДО клика
+      const countBefore = getLikeCount(reactionBtn);
+
       // Устанавливаем флаг, что мы программно кликаем. Это заблокирует нативный сетевой запрос React,
       // чтобы избежать конфликтов с нашими собственными запросами из content.js.
       simulatedPosts.add(postId);
 
       // Кликаем по главной кнопке реакции (открывает popover)
-      reactionBtn.click();
+      fireClick(reactionBtn);
 
       // Ждем popover (как для постановки, так и для снятия лайка)
       const popover = await waitForReactionPopover(1500);
@@ -195,7 +261,7 @@
       }
 
       await new Promise(r => setTimeout(r, 100)); // небольшая пауза для рендера
-      
+
       let heartElement = Array.from(popover.querySelectorAll('img')).find(img => img.src && img.src.includes('heart'));
       if (!heartElement) {
         document.body.click(); // Закрываем popover
@@ -204,10 +270,57 @@
       }
 
       const clickTarget = heartElement.closest('button, [role="button"]') || heartElement.closest('div') || heartElement;
-      clickTarget.click();
+      fireClick(clickTarget);
       console.log(`[BoostyBookmark page_script] Нативный клик по сердечку выполнен для поста ${postId} (shouldLike=${shouldLike})`);
 
-      // Снимаем флаг блокировки через 500мс (достаточно для перехвата fetch)
+      // Ждём обновления DOM счётчика после клика
+      await new Promise(r => setTimeout(r, 600));
+
+      // Проверка рассинхрона: сверяем изменение счётчика с ожиданием
+      if (countBefore !== null) {
+        const countAfter = getLikeCount(reactionBtn);
+        if (countAfter !== null) {
+          const increased = countAfter > countBefore;  // лайк поставлен
+          const decreased = countAfter < countBefore;  // лайк снят
+
+          const expectedIncrease = shouldLike;          // ожидали поставить лайк
+          const expectedDecrease = !shouldLike;         // ожидали снять лайк
+
+          const isSynced = (expectedIncrease && increased) || (expectedDecrease && decreased);
+
+          if (!isSynced) {
+            // Счётчик изменился не так, как ожидалось — досинхронизируем повторным кликом
+            console.warn(
+              `[BoostyBookmark page_script] Рассинхрон счётчика лайков для ${postId}: ` +
+              `до=${countBefore}, после=${countAfter}, ожидалось ${shouldLike ? 'увеличение' : 'уменьшение'}. ` +
+              `Досинхронизируем повторным кликом.`
+            );
+
+            // Повторный клик: снова открываем попап и кликаем по сердечку
+            simulatedPosts.add(postId);
+            fireClick(reactionBtn);
+            const retryPopover = await waitForReactionPopover(1500);
+            if (retryPopover) {
+              await new Promise(r => setTimeout(r, 100));
+              const retryHeart = Array.from(retryPopover.querySelectorAll('img')).find(img => img.src && img.src.includes('heart'));
+              if (retryHeart) {
+                const retryTarget = retryHeart.closest('button, [role="button"]') || retryHeart.closest('div') || retryHeart;
+                fireClick(retryTarget);
+                console.log(`[BoostyBookmark page_script] Повторный клик для досинхронизации выполнен (постId=${postId})`);
+              } else {
+                document.body.click();
+              }
+            }
+            setTimeout(() => simulatedPosts.delete(postId), 500);
+          } else {
+            console.log(
+              `[BoostyBookmark page_script] Счётчик лайков синхронизирован (до=${countBefore}, после=${countAfter}, shouldLike=${shouldLike})`
+            );
+          }
+        }
+      }
+
+      // Снимаем флаг блокировки (основной)
       setTimeout(() => simulatedPosts.delete(postId), 500);
 
     } catch (e) {
