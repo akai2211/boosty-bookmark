@@ -178,6 +178,34 @@ esbuild src/content.js --bundle --define:DEV=false --minify-syntax --outfile=.tm
 > [!IMPORTANT]
 > Без галочки `[x]` и коммита следующий чат не поймёт, на каком этапе работа. Шаги 6–7 — обязательны.
 
+### Работа через git worktree
+
+Весь рефакторинг ведётся в **одном отдельном worktree** на **одной долгоживущей ветке** (например `refactor/content-split`). Все этапы (1a … 11) делаются там, по одному за чат, с коммитами на этой ветке. **`main` не трогается до самого конца** — слияние происходит один раз, после прохождения всех этапов и проверок.
+
+**Создание (один раз, в начале):**
+```sh
+# от актуального main создать воркти + ветку под весь рефакторинг
+git worktree add ../boosty-bookmark-refactor -b refactor/content-split
+cd ../boosty-bookmark-refactor
+npm install        # либо симлинк, см. камень №1
+```
+Дальше **вся работа и тестирование** (включая «Load unpacked» в браузере) идёт в `../boosty-bookmark-refactor`. Каждый этап завершается коммитом на ветке `refactor/content-split` (по команде «обнови память и закоммить»).
+
+**Слияние (один раз, в самом конце — после Этапа 11):**
+```sh
+# все этапы [x], npm test зелёный, обе релизные сборки проверены
+git -C ../boosty-bookmark switch main
+git -C ../boosty-bookmark merge refactor/content-split   # или через PR
+git worktree remove ../boosty-bookmark-refactor
+git branch -d refactor/content-split
+```
+
+**Подводные камни именно этого проекта:**
+1. **`node_modules` не шарится между воркти.** В новом воркти нужен `npm install` (esbuild, vitest, playwright). Для скорости можно симлинкнуть: `ln -s ../boosty-bookmark/node_modules ./node_modules`.
+2. **`content.js` — gitignored артефакт (Стратегия 5).** В свежем воркти его **нет** на диске. Перед загрузкой расширения в браузер обязательно `npm run build:js` (или запущенный `npm run watch:js`).
+3. **«Load unpacked» привязан к пути.** Указать в `chrome://extensions` путь к воркти `../boosty-bookmark-refactor` **один раз** в начале и тестировать только там до самого слияния. После каждой пересборки — «Обновить» расширение.
+4. **`main` может уйти вперёд.** Если в `main` во время рефакторинга попадут другие коммиты — периодически подтягивать их в ветку (`git merge main` / `git rebase main` внутри воркти), чтобы финальное слияние прошло без больших конфликтов.
+
 ### [ ] Этап 1a: ESM-инфраструктура и перенос `locales`/`webdav` в `src/`
 
 > Самая объёмная настроечная часть. Цель: проект собирается esbuild'ом в dev-режиме, тесты зелёные на ESM, `locales`/`webdav` забандлены. Релизная сборка (`build.cjs`) и DEV-гейтинг — в Этапе 1b.
