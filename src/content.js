@@ -672,7 +672,7 @@ import * as BoostyBookmarkSync from './webdav-sync.js';
 
   // Инициализация расширения
   async function init() {
-    let version = '0.9.0';
+    let version = '0.8.0';
     try {
       if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getManifest === 'function') {
         const manifest = chrome.runtime.getManifest();
@@ -3612,7 +3612,7 @@ import * as BoostyBookmarkSync from './webdav-sync.js';
     // Сбрасываем скролл наверх
     container.scrollTop = 0;
 
-    let version = '0.9.0';
+    let version = '0.8.0';
     try {
       if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getManifest === 'function') {
         const manifest = chrome.runtime.getManifest();
