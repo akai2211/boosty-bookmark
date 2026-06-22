@@ -305,7 +305,7 @@ git branch -d refactor/content-split
 
 ---
 
-### [ ] Этап 7: Выделение `src/ui/sidebar.js` (Логика и рендеринг UI) — 🔴 ВЫСОКИЙ риск
+### [x] Этап 7: Выделение `src/ui/sidebar.js` (Логика и рендеринг UI) — 🔴 ВЫСОКИЙ риск
 
 1. Создать `src/ui/sidebar.js`.
 2. Перенести: `render`, `renderListContent`, `renderDetailContent`, `renderSettingsContent`, `renderAboutContent`, `renderGroup`, `renderChaptersList`, `createMangaRow`, `createSidebar`, `createTriggerButton`, `detectAndApplyTheme`, `showNotification`, `debounceSave`, `clearTitleNovelty`, `getStatusTooltip`, `moveTab`, `dragAndDropReorder`.

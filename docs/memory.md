@@ -142,6 +142,11 @@
 ## 5. Выполненные коммиты
 *   **Статус:** Все запланированные задачи выполнены. Жду дальнейших указаний Акая.
 *   **Последние коммиты (подробно):**
+    *   **refactor(7): выделение src/ui/sidebar.js (рендеринг UI) — 🔴 высокий риск** _(ветка `refactor/content-split`)_
+        *   `src/ui/sidebar.js` (~2200 строк) — вся логика создания и рендеринга панели: `render`, `renderListContent`, `renderDetailContent`, `renderSettingsContent`, `renderAboutContent`, `renderGroup`, `renderChaptersList`, `createMangaRow`, `createSidebar`, `createTriggerButton`, `detectAndApplyTheme`, `showNotification`, `debounceSave`, `clearTitleNovelty`, `moveTab`, `dragAndDropReorder`. Импортирует из locales/utils/state/sync/templates.
+        *   **Разрыв цикла sidebar ↔ content.js через `setSidebarDeps()`:** dep-локали для остающихся в content.js функций — `getGroupedTitles`, `getPlayerProgressForPost`, `applyDevSettingsEffects`, `sendBoostyReaction`, `removeBoostyReaction`, `formatSyncDate`, `devSettings`. content.js импортирует из sidebar.js (`render`/`showNotification`/`createSidebar`/`createTriggerButton`/`renderListContent`/`renderSettingsContent`), блок templates-импорта удалён (всё ушло в sidebar). `init()` зовёт `setSidebarDeps` после `setStateDeps`/`setSyncDeps`.
+        *   **Текст функций (2118 строк) извлечён точно через sed/python** (учёт урока этапа 6 — не реконструировать по памяти). content.js сократился с ~3823 до ~1774 строк. `npm test` зелёный (28 unit + 8 E2E).
+        *   `docs/split_plan.md`, `docs/tasks.md` — этап 7 отмечен `[x]`.
     *   **refactor(6): выделение src/ui/templates.js (HTML-шаблоны)** _(ветка `refactor/content-split`)_
         *   `src/ui/templates.js` — новый ES-модуль чистых шаблонов (без побочных эффектов): `triggerButtonIcon`, `sidebarLoadingTemplate`, `sidebarShellTemplate(uniqueTagCount)`, `usdtModalTemplate`, `aboutContentTemplate(version)`, `getStatusTooltip`. Импортирует `t` (locales), `escapeHtml`/`BOOKMARK_SVG_PATH`/`TAB_NAMES`/`getUsdtAddress` (utils), `state` (state.js).
         *   `src/content.js` — инлайн-`innerHTML` каркаса/загрузки/иконки/USDT/about и функция `getStatusTooltip` заменены вызовами шаблонов. Шаблоны рядов (тайтлы/группы/главы) внутри `renderListContent`/`renderGroup`/`renderChaptersList` оставлены до этапа 7. `npm test` зелёный (28 unit + 8 E2E).
