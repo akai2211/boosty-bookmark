@@ -2,13 +2,17 @@
   "name": "boosty-bookmark",
   "version": "0.9.0",
   "description": "",
+  "type": "module",
   "main": "content.js",
   "scripts": {
+    "build:js": "esbuild src/content.js --bundle --define:DEV=true --outfile=content.js --sourcemap",
+    "watch:js": "esbuild src/content.js --bundle --define:DEV=true --outfile=content.js --watch --sourcemap",
+    "pretest": "npm run build:js",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "test": "npm run test:unit && npm run test:e2e",
-    "build": "node build.js",
-    "build:firefox": "node build.js --firefox"
+    "build": "node build.cjs",
+    "build:firefox": "node build.cjs --firefox"
   },
   "repository": {
     "type": "git",
@@ -24,6 +28,7 @@
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "archiver": "^8.0.0",
+    "esbuild": "^0.28.1",
     "jsdom": "^29.1.1",
     "vitest": "^4.1.8"
   }

@@ -1,7 +1,8 @@
 /* content.js - Помощник по отслеживанию озвучек на Boosty (Boosty Bookmark) */
+/* Точка входа бандла. Источник правды — src/, корневой content.js собирается esbuild. */
 
-(function () {
-  'use strict';
+import { t, tCategory, getCurrentLang } from './locales.js';
+import * as BoostyBookmarkSync from './webdav-sync.js';
 
   const BLOG_SLUG = 'lightfoxmanga';
   const STORAGE_KEY = `lf_state_${BLOG_SLUG}`;
@@ -78,22 +79,22 @@
       urlCheckIntervalId = null;
     }
     
-    /* DEV_ONLY_START */
-    if (devReactionsIntervalId) {
-      clearInterval(devReactionsIntervalId);
-      devReactionsIntervalId = null;
+    if (DEV) {
+      if (devReactionsIntervalId) {
+        clearInterval(devReactionsIntervalId);
+        devReactionsIntervalId = null;
+      }
+      window.removeEventListener('mouseleave', handleReactionLeave, true);
+      window.removeEventListener('mouseout', handleReactionLeave, true);
+      window.removeEventListener('pointerleave', handleReactionLeave, true);
+      window.removeEventListener('pointerout', handleReactionLeave, true);
+      window.removeEventListener('click', handleGlobalClick, true);
+      window.removeEventListener('scroll', handleDevScroll, { passive: true });
+      if (devScrollTimeout) {
+        clearTimeout(devScrollTimeout);
+        devScrollTimeout = null;
+      }
     }
-    window.removeEventListener('mouseleave', handleReactionLeave, true);
-    window.removeEventListener('mouseout', handleReactionLeave, true);
-    window.removeEventListener('pointerleave', handleReactionLeave, true);
-    window.removeEventListener('pointerout', handleReactionLeave, true);
-    window.removeEventListener('click', handleGlobalClick, true);
-    window.removeEventListener('scroll', handleDevScroll, { passive: true });
-    if (devScrollTimeout) {
-      clearTimeout(devScrollTimeout);
-      devScrollTimeout = null;
-    }
-    /* DEV_ONLY_END */
     
     // Удаляем слушатели событий
     if (eventHandlers.popstate) window.removeEventListener('popstate', eventHandlers.popstate);
@@ -116,12 +117,12 @@
     if (btn) btn.remove();
     if (sidebar) sidebar.remove();
 
-    /* DEV_ONLY_START */
-    const devBtn = document.getElementById('lf-dev-trigger-btn');
-    const devSidebar = document.getElementById('lf-dev-sidebar');
-    if (devBtn) devBtn.remove();
-    if (devSidebar) devSidebar.remove();
-    /* DEV_ONLY_END */
+    if (DEV) {
+      const devBtn = document.getElementById('lf-dev-trigger-btn');
+      const devSidebar = document.getElementById('lf-dev-sidebar');
+      if (devBtn) devBtn.remove();
+      if (devSidebar) devSidebar.remove();
+    }
 
     lastScrolledUrl = null;
     lastScrolledPostId = null;
@@ -445,10 +446,8 @@
     const isTarget = isTargetPage();
     const btn = document.getElementById('lf-trigger-btn');
     const sidebar = document.getElementById('lf-sidebar');
-    /* DEV_ONLY_START */
-    const devBtn = document.getElementById('lf-dev-trigger-btn');
-    const devSidebar = document.getElementById('lf-dev-sidebar');
-    /* DEV_ONLY_END */
+    const devBtn = DEV ? document.getElementById('lf-dev-trigger-btn') : null;
+    const devSidebar = DEV ? document.getElementById('lf-dev-sidebar') : null;
     
     if (isTarget) {
       checkAndScrollToFeed();
@@ -458,9 +457,9 @@
         // Создаем элементы интерфейса
         createSidebar();
         createTriggerButton();
-        /* DEV_ONLY_START */
-        initDevTools();
-        /* DEV_ONLY_END */
+        if (DEV) {
+          initDevTools();
+        }
         
         // Запускаем фоновую синхронизацию (проверка новых постов)
         if (state.posts.length > 0) {
@@ -477,17 +476,17 @@
         // Если интерфейс уже есть, просто показываем его
         btn.style.display = '';
         sidebar.style.display = '';
-        /* DEV_ONLY_START */
-        if (devBtn) devBtn.style.display = devSidebarOpen ? 'none' : '';
-        if (devSidebar) {
-          devSidebar.style.display = '';
-          if (devSidebarOpen) {
-            devSidebar.classList.add('lf-open');
-          } else {
-            devSidebar.classList.remove('lf-open');
+        if (DEV) {
+          if (devBtn) devBtn.style.display = devSidebarOpen ? 'none' : '';
+          if (devSidebar) {
+            devSidebar.style.display = '';
+            if (devSidebarOpen) {
+              devSidebar.classList.add('lf-open');
+            } else {
+              devSidebar.classList.remove('lf-open');
+            }
           }
         }
-        /* DEV_ONLY_END */
       }
       syncActiveTitleFromUrl();
     } else {
@@ -502,13 +501,13 @@
           saveStateToStorage();
         }
       }
-      /* DEV_ONLY_START */
-      if (devBtn) devBtn.style.display = 'none';
-      if (devSidebar) {
-        devSidebar.style.display = 'none';
-        devSidebar.classList.remove('lf-open');
+      if (DEV) {
+        if (devBtn) devBtn.style.display = 'none';
+        if (devSidebar) {
+          devSidebar.style.display = 'none';
+          devSidebar.classList.remove('lf-open');
+        }
       }
-      /* DEV_ONLY_END */
     }
   }
 
@@ -686,9 +685,9 @@
 
     await loadStateFromStorage();
     await loadWebDavConfig();
-    /* DEV_ONLY_START */
-    await loadDevSettings();
-    /* DEV_ONLY_END */
+    if (DEV) {
+      await loadDevSettings();
+    }
 
     // Восстанавливаем активный тайтл и вкладку из sessionStorage (для сохранения состояния текущей вкладки при перезагрузке)
     try {
@@ -1843,14 +1842,14 @@
         }
 
         for (const p of pagePosts) {
-          /* DEV_ONLY_START */
-          if (typeof devSettings !== 'undefined' && devSettings.enabled && devSettings.cutoffDate) {
-            const cutoffTime = new Date(devSettings.cutoffDate).getTime() / 1000;
-            if (p.publishTime > cutoffTime) {
-              continue;
+          if (DEV) {
+            if (devSettings.enabled && devSettings.cutoffDate) {
+              const cutoffTime = new Date(devSettings.cutoffDate).getTime() / 1000;
+              if (p.publishTime > cutoffTime) {
+                continue;
+              }
             }
           }
-          /* DEV_ONLY_END */
           const fresh = {
             id: p.id,
             title: p.title || 'Без названия',
@@ -1963,12 +1962,12 @@
         const pagePosts = result.data || [];
         
         let filteredPagePosts = pagePosts;
-        /* DEV_ONLY_START */
-        if (typeof devSettings !== 'undefined' && devSettings.enabled && devSettings.cutoffDate) {
-          const cutoffTime = new Date(devSettings.cutoffDate).getTime() / 1000;
-          filteredPagePosts = pagePosts.filter(p => p.publishTime <= cutoffTime);
+        if (DEV) {
+          if (devSettings.enabled && devSettings.cutoffDate) {
+            const cutoffTime = new Date(devSettings.cutoffDate).getTime() / 1000;
+            filteredPagePosts = pagePosts.filter(p => p.publishTime <= cutoffTime);
+          }
         }
-        /* DEV_ONLY_END */
         
         // Преобразуем посты в компактный формат для хранения
         const processed = filteredPagePosts.map(p => ({
@@ -2044,12 +2043,12 @@
       if (!pagePosts.length) return;
       
       let filteredPagePosts = pagePosts;
-      /* DEV_ONLY_START */
-      if (typeof devSettings !== 'undefined' && devSettings.enabled && devSettings.cutoffDate) {
-        const cutoffTime = new Date(devSettings.cutoffDate).getTime() / 1000;
-        filteredPagePosts = pagePosts.filter(p => p.publishTime <= cutoffTime);
+      if (DEV) {
+        if (devSettings.enabled && devSettings.cutoffDate) {
+          const cutoffTime = new Date(devSettings.cutoffDate).getTime() / 1000;
+          filteredPagePosts = pagePosts.filter(p => p.publishTime <= cutoffTime);
+        }
       }
-      /* DEV_ONLY_END */
       
       const oldPosts = [...state.posts];
       let hasUpdates = false;
@@ -2112,7 +2111,7 @@
   // Анализ новых постов и добавление тайтлов в списки Новые тайтлы / Новые главы
   function analyzeNewContent(oldPosts, freshPosts) {
     // В дев-режиме с эмуляцией даты:
-    const isDevEmulation = typeof devSettings !== 'undefined' && devSettings.enabled && devSettings.cutoffDate;
+    const isDevEmulation = DEV && devSettings.enabled && devSettings.cutoffDate;
     
     if (isDevEmulation) {
       const cutoffTimeMs = new Date(devSettings.cutoffDate).getTime();
@@ -3320,7 +3319,7 @@
             showNotification(t('notify_data_deleted'));
             
             // Сбрасываем DevTools в памяти к заводским настройкам
-            if (typeof devSettings !== 'undefined') {
+            if (DEV) {
               devSettings.enabled = false;
               devSettings.cutoffDate = '';
               devSettings.hideAboutAuthor = true;
@@ -4056,8 +4055,10 @@
             resetConfirmState();
             state.newTitles = [];
             state.newChapters = [];
-            const isDevEmulation = typeof devSettings !== 'undefined' && devSettings.enabled && devSettings.cutoffDate;
-            state.lastVisit = isDevEmulation ? new Date(devSettings.cutoffDate).getTime() : Date.now();
+            state.lastVisit = Date.now();
+            if (DEV && devSettings.enabled && devSettings.cutoffDate) {
+              state.lastVisit = new Date(devSettings.cutoffDate).getTime();
+            }
             saveStateToStorage();
             render();
           }
@@ -5173,7 +5174,7 @@
     return `${date.getDate()} ${monthStr} ${date.getFullYear()}`;
   }
 
-  /* DEV_ONLY_START */
+  // --- DevTools (dev-only). Вызовы гейтятся через if (DEV); в релизе вырезается tree-shaking'ом ---
   let devSettings = {
     enabled: false,
     cutoffDate: '',
@@ -5584,7 +5585,6 @@
       showNotification(`Успешно удалено ${deletedCount} постов!`);
     });
   }
-  /* DEV_ONLY_END */
 
   // Запуск
   if (document.readyState === 'loading') {
@@ -5593,22 +5593,19 @@
     init();
   }
 
-  // Экспорт для среды тестирования (Node.js/Vitest)
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-      state,
-      webdavConfig,
-      ensureUserData,
-      formatDate,
-      arePostsEqual,
-      getGroupedTitles,
-      checkAndTriggerOpenChat,
-      syncActiveTitleFromUrl,
-      getWebDavOrigin,
-      requestWebDavPermission,
-      BLOG_SLUG,
-      TAGS_BLACKLIST,
-      TAB_NAMES
-    };
-  }
-})();
+  // Экспорт для среды тестирования (Vitest, ESM)
+export {
+  state,
+  webdavConfig,
+  ensureUserData,
+  formatDate,
+  arePostsEqual,
+  getGroupedTitles,
+  checkAndTriggerOpenChat,
+  syncActiveTitleFromUrl,
+  getWebDavOrigin,
+  requestWebDavPermission,
+  BLOG_SLUG,
+  TAGS_BLACKLIST,
+  TAB_NAMES
+};

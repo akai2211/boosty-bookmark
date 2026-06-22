@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import manifest from '../manifest.json';
 
 
 // 1. Настройка моков для глобальных объектов Chrome
@@ -12,14 +13,7 @@ global.chrome = {
   runtime: {
     id: 'test-extension-id',
     lastError: null,
-    getManifest: vi.fn(() => {
-      try {
-        const manifest = require('../manifest.json');
-        return { version: manifest.version };
-      } catch (e) {
-        return { version: '0.9.0' };
-      }
-    })
+    getManifest: vi.fn(() => ({ version: manifest.version }))
   }
 };
 
@@ -35,9 +29,9 @@ const sessionStorageMock = (() => {
 })();
 global.sessionStorage = sessionStorageMock;
 
-// Импортируем локализацию и тестируемый модуль
-require('../locales.js');
-const content = require('../content.js');
+// Импортируем тестируемый модуль (ESM). Динамический импорт — чтобы моки chrome/sessionStorage
+// были установлены до выполнения init() при загрузке модуля.
+const content = await import('../src/content.js');
 
 describe('Юнит-тесты расширения Boosty Bookmark', () => {
   beforeEach(() => {

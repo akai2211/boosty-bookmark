@@ -187,3 +187,10 @@
 - [x] Добавить опцию `syncTitleFromUrl` в настройки расширения с чекбоксом в разделе «Настройки отслеживания» для включения/выключения автоперехода
 - [x] Локализовать описание настройки на русский и английский языки в `locales.js`
 - [x] Добавить юнит-тесты для проверки работы `syncActiveTitleFromUrl` (включая сценарий с отключенной опцией в настройках) в `tests/unit.test.js`
+
+## 24. Рефакторинг: разбиение монолита content.js на ES-модули (esbuild)
+> Ведётся в worktree `../boosty-bookmark-refactor` на ветке `refactor/content-split`. Полный план и прогресс по этапам — в `docs/split_plan.md`. `main` не трогается до финального слияния.
+- [x] **Этап 1a** — ESM-инфраструктура: установлен `esbuild`, `"type": "module"`, `src/{content,locales,webdav-sync}.js` как ES-модули; манифесты (Chrome+Firefox) грузят только `jszip.min.js`+`content.js`; `content.js` — артефакт сборки (`.gitignore` + `git rm --cached`); тесты переведены на ESM (28 unit зелёные)
+- [x] **Этап 1b** — релизная сборка: `build.js` → `build.cjs`, релизный `content.js` собирается через esbuild (`--define:DEV=false --minify-syntax`); 11 `DEV_ONLY`-блоков переведены на флаг `if (DEV)`; оба релизных архива без dev-кода; `npm test` зелёный (28 unit + 8 E2E)
+- [ ] **Этап 2** — финализация `src/locales.js`/`src/webdav-sync.js`, удаление корневых дубликатов
+- [ ] **Этапы 3–11** — выделение модулей (`utils`, `state`, `sync`, `ui/templates`, `ui/sidebar`, `navigation`, `players`, `ui/devtools`, точка входа) — см. `docs/split_plan.md`

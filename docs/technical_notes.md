@@ -452,5 +452,35 @@
 * **Сброс при возврате:** Если пользователь переходит с теговой страницы обратно на общую ленту (параметр тега в URL исчезает), расширение сбрасывает `state.ui.activeTitle` в `null`, возвращая сайдбар к списку тайтлов.
 * **Управление в настройках:** В раздел «Настройки отслеживания» добавлен параметр `syncTitleFromUrl` («Переход по тегам на Boosty»), который позволяет полностью включить или выключить автоматическую навигацию по тегам при клике на самом сайте. По умолчанию опция включена. Локализация реализована для русского и английского языков.
 
+---
+
+## 30. Модульная архитектура и сборка через esbuild (рефакторинг content.js)
+
+> Внедряется поэтапно в рамках рефакторинга монолита `content.js` (см. `docs/split_plan.md`). На момент написания выполнены этапы 1a и 1b (инфраструктура); выделение модулей в `src/` продолжается на этапах 2–11.
+
+### 30.1 Источник правды — `src/`, `content.js` — артефакт
+Исходный код переезжает в папку `src/` (ES-модули). Корневой `content.js` теперь **результат бандла** esbuild и **не коммитится** (внесён в `.gitignore`: `/content.js`, `/content.js.map`; убран из индекса через `git rm --cached`). Свежий клон/worktree собирает бандл командой `npm run build:js`. Перед загрузкой расширения в браузер обязательно держать запущенным `npm run watch:js`, иначе грузится устаревший бандл.
+
+### 30.2 Бандлинг и манифесты
+`locales.js` и `webdav-sync.js` переехали в `src/` как ES-модули с именованными `export` и **бандлятся внутрь** `content.js` (импортируются из `src/content.js`). Поэтому из секции `content_scripts → js` обоих манифестов (`manifest.json` и `manifest.firefox.json`) они удалены — остаются только `jszip.min.js` и `content.js`. `jszip.min.js` остаётся внешним глобалом (используется как `new JSZip()`), не бандлится. `page_script.js` (MAIN-world) собирается отдельно и копируется как есть.
+
+### 30.3 Флаг `DEV` вместо маркеров `DEV_ONLY` (в JS)
+Прежний механизм вырезания dev-кода через комментарии-маркеры `/* DEV_ONLY_START/END */` + regex несовместим с esbuild (он удаляет комментарии даже без minify). Поэтому **в JS** dev-код гейтится через глобальный флаг `DEV`, подставляемый esbuild на этапе сборки (`--define`):
+* **dev-сборка** (`build:js`/`watch:js`): `--define:DEV=true` — весь dev-код сохраняется;
+* **релиз** (`build.cjs`): `--define:DEV=false --minify-syntax` — esbuild сворачивает `if (false)` и tree-shaking'ом удаляет ставшие неиспользуемыми функции DevTools.
+> `--minify-syntax` обязателен (иначе ветка `if (false) {}` остаётся). Важно: esbuild **не** инлайнит `const` в тернарное выражение — для гарантированного вырезания используется конструкция `if (DEV) { … }`, а не тернар. Маркеры `DEV_ONLY` остались только в `styles.css` (для CSS regex-механизм в `build.cjs` сохранён).
+
+В юнит-тестах (Vitest импортирует `src/*.js` напрямую, минуя esbuild) флаг задан в `vitest.config.js`: `define: { DEV: 'false' }`, иначе голый `DEV` падает с `ReferenceError`.
+
+### 30.4 Скрипт сборки `build.cjs`
+`build.js` переименован в `build.cjs` (расширение `.cjs` нужно из-за `"type": "module"` в `package.json` — иначе CommonJS-скрипт ломается). Релизный `content.js` собирается через `esbuild.buildSync({ entryPoints: ['src/content.js'], bundle: true, define: { DEV: 'false' }, minifySyntax: true, charset: 'utf8' })` прямо в `.tmp_build/`. `charset: 'utf8'` сохраняет кириллицу читаемой (без экранирования в `\u`). `cleanDevCode` теперь применяется только к `.css`.
+
+### 30.5 Тесты на ESM
+`package.json` получил `"type": "module"`; тесты переписаны с CommonJS (`require`) на ESM (`import`):
+* `tests/unit.test.js` грузит `src/content.js` через **динамический** `await import()` — это важно, так как статические `import` хойстятся выше установки моков `global.chrome`/`sessionStorage`, и `init()` отработал бы без моков;
+* `manifest.json` подключается через `import manifest from '../manifest.json'` (Vitest резолвит JSON нативно);
+* в E2E (`tests/extension.spec.js`) `__dirname` восстановлен из `import.meta.url` (в ESM он недоступен);
+* добавлен npm-хук `"pretest": "npm run build:js"` — гарантирует свежий бандл перед `npm test` (E2E грузит `content.js` из корня).
+
 
 

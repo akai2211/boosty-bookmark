@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
-
-require('../locales.js');
-const sync = require('../webdav-sync.js');
+import * as sync from '../src/webdav-sync.js';
 
 describe('WebDAV sync: слияние данных', () => {
   describe('mergeUserData', () => {

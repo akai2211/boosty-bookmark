@@ -4,3 +4,7 @@ node_modules/
 test-results/
 .tmp_build/
 *.zip
+
+# Артефакт сборки esbuild (источник правды — src/)
+/content.js
+/content.js.map

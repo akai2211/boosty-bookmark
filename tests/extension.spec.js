@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { chromium } from 'playwright';
+
+// __dirname недоступен в ESM ("type": "module") — восстанавливаем из import.meta.url
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test.describe('E2E-тесты расширения Boosty Bookmark', () => {
   let context;

@@ -1,20 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 const { ZipArchive } = require('archiver');
+const esbuild = require('esbuild');
 
 const isFirefox = process.argv.includes('--firefox');
 const TMP_DIR = path.join(__dirname, '.tmp_build');
 
 // Файлы и папки, которые нужно включить в расширение
+// content.js собирается отдельно через esbuild (см. ниже); locales.js и webdav-sync.js
+// забандлены внутрь content.js и в архив отдельными файлами не попадают.
 const INCLUDE_PATHS = [
   'icons',
   isFirefox ? 'manifest.firefox.json' : 'manifest.json',
   'background.js',
-  'content.js',
   'styles.css',
   'jszip.min.js',
-  'webdav-sync.js',
-  'locales.js',
   'page_script.js'
 ];
 
@@ -138,17 +138,31 @@ async function build() {
     if (stat.isDirectory()) {
       copyFolderRecursiveSync(srcPath, destPath);
     } else {
-      // Если это js или css, вырезаем отладочный код
-      if (item.endsWith('.js') || item.endsWith('.css')) {
+      // DEV_ONLY-маркеры остались только в CSS. Dev-код в JS вырезается esbuild'ом
+      // на этапе сборки content.js (--define:DEV=false --minify-syntax).
+      if (item.endsWith('.css')) {
         let content = fs.readFileSync(srcPath, 'utf8');
         content = cleanDevCode(content);
         fs.writeFileSync(destPath, content, 'utf8');
-        console.log(`🧹 Очищен от DEV-кода: ${item}`);
+        console.log(`🧹 Очищен от DEV-кода (CSS): ${item}`);
       } else {
         fs.copyFileSync(srcPath, destPath);
       }
     }
   }
+
+  // 2.5 Релизная сборка content.js: бандл esbuild с вырезанным dev-кодом (DEV=false).
+  // --minify-syntax обязателен — иначе ветки if (false) {} не удаляются (см. split_plan.md, Стратегия 4).
+  console.log('🔨 Сборка content.js через esbuild (DEV=false)...');
+  esbuild.buildSync({
+    entryPoints: [path.join(__dirname, 'src', 'content.js')],
+    bundle: true,
+    define: { DEV: 'false' },
+    minifySyntax: true,
+    charset: 'utf8',
+    outfile: path.join(TMP_DIR, 'content.js')
+  });
+  console.log('✅ content.js собран (релиз).');
 
   // 3. Создаем ZIP-архив
   console.log('📦 Создаем ZIP-архив релиза...');
