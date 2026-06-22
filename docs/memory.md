@@ -142,6 +142,11 @@
 ## 5. Выполненные коммиты
 *   **Статус:** Все запланированные задачи выполнены. Жду дальнейших указаний Акая.
 *   **Последние коммиты (подробно):**
+    *   **refactor(9): выделение src/players.js (медиаплееры)** _(ветка `refactor/content-split`)_
+        *   `src/players.js` — интеграция с плеерами Boosty/VK (автозапоминание времени audio/video сквозь Shadow DOM, принудительное качество): `getClosestElement`, `getPostIdForPlayer`, `getPlayerProgressForPost`, `updateChapterProgressInUI`, `getPlayerUniqueId`, `trackPlayerProgress`, `selectQualityOption`, `openQualitySubmenu`, `forceVideoQuality`, `setupVideoPlayerQuality`, `initPlayerTracking`.
+        *   **Модуль самодостаточен** — импортирует только `state`/`saveStateToStorage` (state), `t` (locales), `formatSeconds` (utils); функции зовут только друг друга. Dep-локали НЕ понадобились (в отличие от sync/sidebar/navigation). Наружу экспортирует только `getPlayerProgressForPost` (для `setSidebarDeps`) и `initPlayerTracking` (для `checkUrlAndToggleVisibility`).
+        *   content.js → ~1137 строк. `npm test` зелёный (28 unit + 8 E2E).
+        *   `docs/split_plan.md`, `docs/tasks.md` — этап 9 отмечен `[x]`.
     *   **refactor(8): выделение src/navigation.js (навигация и скроллинг)** _(ветка `refactor/content-split`)_
         *   `src/navigation.js` — навигация/автоскролл на Boosty: `isTargetPage`, `hasPostHash`, `checkAndScrollToPost`, `checkAndScrollToFeed`, `checkAndTriggerOpenChat`, `syncActiveTitleFromUrl`, `patchHistory`. Импортирует только `BLOG_SLUG`/`isExtensionContextValid` (utils) и `state`. Модульные переменные (`lastScrolledUrl`/`lastScrolledPostId`/`lastProcessedTagParam`/`lastCheckedChatUrl`) переехали внутрь.
         *   Цикл развязан через `setNavigationDeps()` (dep-локали: `render`, `getGroupedTitles`, `checkUrlAndToggleVisibility`, `cleanup`, `eventHandlers`). Для остающихся `cleanup()`/`checkUrlAndToggleVisibility()` экспортированы `resetNavScrollState()`/`resetProcessedTagParam()`. `checkUrlAndToggleVisibility` сознательно оставлен в content.js (оркестратор, переедет в точку входа на этапе 11).

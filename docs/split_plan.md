@@ -326,7 +326,7 @@ git branch -d refactor/content-split
 
 ---
 
-### [ ] Этап 9: Выделение `src/players.js` (Интеграция с медиаплеерами) — независимый, отложен
+### [x] Этап 9: Выделение `src/players.js` (Интеграция с медиаплеерами) — независимый, отложен
 
 1. Создать `src/players.js`.
 2. Перенести: `trackPlayerProgress`, `initPlayerTracking`, `getPlayerUniqueId`, `getPostIdForPlayer`, `getPlayerProgressForPost`, `updateChapterProgressInUI`, `getClosestElement`, `forceVideoQuality`, `openQualitySubmenu`, `selectQualityOption`, `setupVideoPlayerQuality`.
