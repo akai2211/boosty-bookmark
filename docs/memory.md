@@ -142,6 +142,10 @@
 ## 5. Выполненные коммиты
 *   **Статус:** Все запланированные задачи выполнены. Жду дальнейших указаний Акая.
 *   **Последние коммиты (подробно):**
+    *   **refactor(3): выделение src/utils.js (утилиты и константы)** _(ветка `refactor/content-split`)_
+        *   `src/utils.js` — новый ES-модуль: константы (`BLOG_SLUG`, `STORAGE_KEY`, `WEBDAV_CONFIG_KEY`, `WEBDAV_AUTO_SYNC_MIN_INTERVAL_MS`, `TAGS_BLACKLIST`, `TAB_NAMES`, SVG-пути `FOX/PLATE/BOOKMARK_SVG_PATH`) и утилиты (`escapeHtml`, `getUsdtAddress`, `isExtensionContextValid`, `formatDate`, `arePostsEqual`, `formatSeconds`). Импортирует `t` из `./locales.js` (нужен для `TAB_NAMES` и `formatDate`).
+        *   `src/content.js` — соответствующие определения удалены, добавлен именованный импорт из `./utils.js`. `npm test` зелёный (28 unit + 8 E2E).
+        *   `docs/split_plan.md`, `docs/tasks.md` — этап 3 отмечен `[x]`.
     *   **refactor(2): удаление корневых дубликатов locales/webdav-sync** _(ветка `refactor/content-split`)_
         *   `locales.js`, `webdav-sync.js` (корень) — удалены (`git rm`); единственные источники теперь `src/locales.js` и `src/webdav-sync.js` (ES-модули с именованными экспортами, забандлены в `content.js` через esbuild).
         *   Сверено, что ссылок на корневые модули не осталось: тесты импортируют из `../src/`, манифесты грузят только `jszip.min.js`+`content.js`, `INCLUDE_PATHS` в `build.cjs` их не содержит. `npm test` зелёный (28 unit + 8 E2E).

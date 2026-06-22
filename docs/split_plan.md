@@ -259,7 +259,7 @@ git branch -d refactor/content-split
 
 ---
 
-### [ ] Этап 3: Выделение `src/utils.js` (Утилиты и константы)
+### [x] Этап 3: Выделение `src/utils.js` (Утилиты и константы)
 
 1. Создать `src/utils.js`.
 2. Перенести из `src/content.js`:
