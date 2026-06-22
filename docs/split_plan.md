@@ -294,7 +294,7 @@ git branch -d refactor/content-split
 
 ---
 
-### [ ] Этап 6: Выделение `src/ui/templates.js` (HTML-шаблоны интерфейса)
+### [x] Этап 6: Выделение `src/ui/templates.js` (HTML-шаблоны интерфейса)
 
 > Prerequisite для `sidebar` (Этап 7): чистые шаблоны выносятся первыми, чтобы sidebar импортировал их, а не держал инлайн.
 
