@@ -192,5 +192,5 @@
 > Ведётся в worktree `../boosty-bookmark-refactor` на ветке `refactor/content-split`. Полный план и прогресс по этапам — в `docs/split_plan.md`. `main` не трогается до финального слияния.
 - [x] **Этап 1a** — ESM-инфраструктура: установлен `esbuild`, `"type": "module"`, `src/{content,locales,webdav-sync}.js` как ES-модули; манифесты (Chrome+Firefox) грузят только `jszip.min.js`+`content.js`; `content.js` — артефакт сборки (`.gitignore` + `git rm --cached`); тесты переведены на ESM (28 unit зелёные)
 - [x] **Этап 1b** — релизная сборка: `build.js` → `build.cjs`, релизный `content.js` собирается через esbuild (`--define:DEV=false --minify-syntax`); 11 `DEV_ONLY`-блоков переведены на флаг `if (DEV)`; оба релизных архива без dev-кода; `npm test` зелёный (28 unit + 8 E2E)
-- [ ] **Этап 2** — финализация `src/locales.js`/`src/webdav-sync.js`, удаление корневых дубликатов
+- [x] **Этап 2** — финализация `src/locales.js`/`src/webdav-sync.js`: удалены корневые дубликаты `locales.js`/`webdav-sync.js` (`git rm`), всё указывает на `src/` (тесты, манифесты, `INCLUDE_PATHS`); `npm test` зелёный (28 unit + 8 E2E)
 - [ ] **Этапы 3–11** — выделение модулей (`utils`, `state`, `sync`, `ui/templates`, `ui/sidebar`, `navigation`, `players`, `ui/devtools`, точка входа) — см. `docs/split_plan.md`
