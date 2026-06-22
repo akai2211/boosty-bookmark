@@ -142,6 +142,11 @@
 ## 5. Выполненные коммиты
 *   **Статус:** Все запланированные задачи выполнены. Жду дальнейших указаний Акая.
 *   **Последние коммиты (подробно):**
+    *   **refactor(4): выделение src/state.js (состояние и хранилище)** _(ветка `refactor/content-split`)_
+        *   `src/state.js` — новый ES-модуль: объекты `state` и `webdavConfig` + функции работы с `chrome.storage` (`loadStateFromStorage`, `saveStateToStorage`, `ensureUserData`, `updateExtensionBadge`, `debouncedWebDavUpload`, `exportUserData`, `importUserData`, `loadWebDavConfig`, `saveWebDavConfig`, `buildLocalChannelsMapFromStorage`, `applyMergedChannelToState`). Импортирует `t` из `./locales.js` и `BLOG_SLUG/STORAGE_KEY/WEBDAV_CONFIG_KEY/isExtensionContextValid` из `./utils.js`.
+        *   **Разрыв цикла state ↔ sidebar/sync через внедрение зависимостей:** `state.js` экспортирует `setStateDeps(overrides)`, внутренние вызовы `render`/`showNotification`/`performWebDavSync`/`isWebDavConfigured` идут через объект `deps` (по умолчанию no-op). `content.js` вызывает `setStateDeps({...})` в начале `init()` — **до** `loadStateFromStorage` (миграции внутри загрузки дёргают `saveStateToStorage → debouncedWebDavUpload`). Это тот же паттерн, что план закладывал на этап 5.
+        *   `src/content.js` — определения удалены, добавлен именованный импорт из `./state.js`; реэкспорт `state`/`webdavConfig`/`ensureUserData` сохранён для юнит-тестов. `npm test` зелёный (28 unit + 8 E2E).
+        *   `docs/split_plan.md`, `docs/tasks.md` — этап 4 отмечен `[x]`.
     *   **refactor(3): выделение src/utils.js (утилиты и константы)** _(ветка `refactor/content-split`)_
         *   `src/utils.js` — новый ES-модуль: константы (`BLOG_SLUG`, `STORAGE_KEY`, `WEBDAV_CONFIG_KEY`, `WEBDAV_AUTO_SYNC_MIN_INTERVAL_MS`, `TAGS_BLACKLIST`, `TAB_NAMES`, SVG-пути `FOX/PLATE/BOOKMARK_SVG_PATH`) и утилиты (`escapeHtml`, `getUsdtAddress`, `isExtensionContextValid`, `formatDate`, `arePostsEqual`, `formatSeconds`). Импортирует `t` из `./locales.js` (нужен для `TAB_NAMES` и `formatDate`).
         *   `src/content.js` — соответствующие определения удалены, добавлен именованный импорт из `./utils.js`. `npm test` зелёный (28 unit + 8 E2E).
