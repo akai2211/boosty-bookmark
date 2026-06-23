@@ -11,7 +11,8 @@ import { render, showNotification } from './sidebar.js';
     enabled: false,
     cutoffDate: '',
     hideAboutAuthor: true,
-    alwaysShowReactions: true
+    alwaysShowReactions: true,
+    showAllNewChapters: false  // «Новые главы» для всех тайтлов, а не только отслеживаемых
   };
 
   function loadDevSettings() {
@@ -25,6 +26,7 @@ import { render, showNotification } from './sidebar.js';
           devSettings.cutoffDate = saved.cutoffDate || '';
           devSettings.hideAboutAuthor = saved.hideAboutAuthor !== undefined ? !!saved.hideAboutAuthor : true;
           devSettings.alwaysShowReactions = saved.alwaysShowReactions !== undefined ? !!saved.alwaysShowReactions : true;
+          devSettings.showAllNewChapters = saved.showAllNewChapters !== undefined ? !!saved.showAllNewChapters : false;
           resolve();
         });
       } catch (e) {
@@ -339,13 +341,14 @@ import { render, showNotification } from './sidebar.js';
               Всегда раскрывать лайки (меню реакций)
             </label>
           </div>
+          <div class="lf-dev-row" style="margin-top: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="lf-dev-show-all-new-chapters" ${devSettings.showAllNewChapters ? 'checked' : ''}>
+              «Новые главы» для всех тайтлов
+            </label>
+          </div>
           <button id="lf-dev-save-btn" class="lf-dev-btn">Сохранить настройки</button>
-        </div>
-
-        <div class="lf-dev-section">
-          <h4>✂️ Очистка базы данных</h4>
-          <button id="lf-dev-crop-btn" class="lf-dev-btn lf-dev-btn-danger">Обрезать посты новее даты</button>
-          <p class="lf-dev-help">Удаляет из локальной базы все посты, которые были опубликованы позже выбранной даты отсечки.</p>
+          <p class="lf-dev-help">При сохранении база автоматически приводится к выбранной дате: посты новее отсечки убираются из кэша, а появившиеся с прошлой даты — доливаются во «Новые». Прогресс (галочки/заметки) сохраняется.</p>
         </div>
       </div>
     `;
@@ -364,57 +367,53 @@ import { render, showNotification } from './sidebar.js';
       const cutoffInput = document.getElementById('lf-dev-cutoff-date');
       const hideAboutAuthorCheckbox = document.getElementById('lf-dev-hide-about-author');
       const alwaysShowReactionsCheckbox = document.getElementById('lf-dev-always-show-reactions');
-      
+      const showAllNewChaptersCheckbox = document.getElementById('lf-dev-show-all-new-chapters');
+
+      // Прошлое состояние эмуляции — нужно, чтобы вычислить границу новизны.
+      const prevEnabled = devSettings.enabled;
+      const prevCutoff = devSettings.cutoffDate;
+
       devSettings.enabled = enabledCheckbox.checked;
       devSettings.cutoffDate = cutoffInput.value;
       devSettings.hideAboutAuthor = hideAboutAuthorCheckbox.checked;
       devSettings.alwaysShowReactions = alwaysShowReactionsCheckbox.checked;
-      
+      devSettings.showAllNewChapters = showAllNewChaptersCheckbox.checked;
+
+      // state.lastVisit — «базовая точка» новизны: всё, что вышло после неё, попадает во «Новые».
+      // В дев-эмуляции analyzeNewContent пересчитывает «Новые» от этой границы по текущей базе.
       if (devSettings.enabled && devSettings.cutoffDate) {
-        const cutoffTimeMs = new Date(devSettings.cutoffDate).getTime();
-        if (!state.lastVisit || state.lastVisit > cutoffTimeMs) {
-          state.lastVisit = cutoffTimeMs - 24 * 60 * 60 * 1000;
+        const newMs = new Date(devSettings.cutoffDate).getTime();
+        if (!prevEnabled || !prevCutoff) {
+          // Первое включение: базовая точка = отсечка (новинок ещё нет).
+          state.lastVisit = newMs;
+        } else if (newMs < new Date(prevCutoff).getTime()) {
+          // Сдвиг даты назад: новая базовая точка.
+          state.lastVisit = newMs;
         }
+        // Сдвиг вперёд / без смены даты: базовую точку НЕ трогаем — «Новые» копят дельту
+        // от первой отсечки (накопление между шагами).
+
+        // «Возврат в прошлое»: убираем из кэша посты новее отсечки. user_data (прогресс)
+        // не трогаем — при доливке посты снова прицепятся по имени тайтла.
+        const cutoffSec = newMs / 1000;
+        state.posts = state.posts.filter(p => p.publishTime <= cutoffSec);
       } else {
-        state.lastVisit = Date.now();
+        // Выключение эмуляции: граница = последняя эмулируемая дата, чтобы реальные посты
+        // после неё доехали во «Новые» и добавились к накопленным. Кэш не обрезаем —
+        // синхронизация дольёт актуальные посты.
+        state.lastVisit = (prevEnabled && prevCutoff) ? new Date(prevCutoff).getTime() : Date.now();
       }
-      state.newTitles = [];
-      state.newChapters = [];
       await saveStateToStorage();
-      
+
       await saveDevSettings();
       applyDevSettingsEffects();
       showNotification('Настройки DevTools сохранены!');
       renderDevSidebarContent();
       render(); // перерисовать, чтобы обновить списки во вкладках
-      
-      // Автоматически запускаем синхронизацию для применения новых настроек отсечки
-      performIncrementalSync();
-    });
 
-    devSidebar.querySelector('#lf-dev-crop-btn').addEventListener('click', async () => {
-      const cutoffInput = document.getElementById('lf-dev-cutoff-date');
-      const dateVal = cutoffInput.value;
-      if (!dateVal) {
-        showNotification('Укажите дату отсечки!');
-        return;
-      }
-
-      if (!confirm(`Вы уверены, что хотите удалить все локальные посты новее ${dateVal}?`)) {
-        return;
-      }
-
-      const cutoffTime = new Date(dateVal).getTime() / 1000;
-      const originalCount = state.posts.length;
-      state.posts = state.posts.filter(p => p.publishTime <= cutoffTime);
-      const deletedCount = originalCount - state.posts.length;
-
-      state.collapsedGroups = {};
-      
-      await saveStateToStorage();
-      render();
-      renderDevSidebarContent();
-      showNotification(`Успешно удалено ${deletedCount} постов!`);
+      // Синхронизация: дольёт посты до отсечки (или реальные при выключении) и отметит новые.
+      await performIncrementalSync();
+      renderDevSidebarContent(); // обновить статистику (кол-во постов/дата) после доливки
     });
   }
 

@@ -20,7 +20,7 @@ let render = () => {};
 let renderListContent = () => {};
 let renderSettingsContent = () => {};
 let showNotification = () => {};
-let devSettings = { enabled: false, cutoffDate: '', alwaysShowReactions: true };
+let devSettings = { enabled: false, cutoffDate: '', alwaysShowReactions: true, showAllNewChapters: false };
 let eventHandlers = {};
 
 function setSyncDeps(d) {
@@ -974,32 +974,28 @@ async function backgroundSync() {
 
 // Анализ новых постов и добавление тайтлов в списки Новые тайтлы / Новые главы
 function analyzeNewContent(oldPosts, freshPosts) {
-  // В дев-режиме с эмуляцией даты:
-  const isDevEmulation = DEV && devSettings.enabled && devSettings.cutoffDate;
-
-  if (isDevEmulation) {
-    const cutoffTimeMs = new Date(devSettings.cutoffDate).getTime();
-
-    // Инициализируем lastVisit эмулируемой датой отсечки минус 1 день, если он равен 0 или не задан
-    if (!state.lastVisit || state.lastVisit === 0) {
-      state.lastVisit = cutoffTimeMs - 24 * 60 * 60 * 1000;
+  // Дев-эмуляция: «Новые» пересчитываются целиком от границы lastVisit по текущей базе.
+  // Так результат не зависит ни от порядка действий, ни от того, что было в базе раньше,
+  // а переключатель showAllNewChapters применяется сразу при следующем сохранении.
+  if (DEV && devSettings.enabled && devSettings.cutoffDate) {
+    if (!state.lastVisit) {
+      state.lastVisit = new Date(devSettings.cutoffDate).getTime();
     }
-
     state.newTitles = [];
     state.newChapters = [];
-
-    const allGrouped = getGroupedTitlesInternal(freshPosts);
-    allGrouped.forEach(manga => {
-      const firstPostTime = manga.posts.length > 0 ? manga.posts[0].publishTime * 1000 : 0;
-      const isNewTitle = firstPostTime > state.lastVisit;
-      if (isNewTitle) {
+    getGroupedTitlesInternal(freshPosts).forEach(manga => {
+      if (manga.posts.length === 0) return;
+      const firstPostMs = manga.posts[0].publishTime * 1000;                      // самый ранний пост тайтла
+      const lastPostMs = manga.posts[manga.posts.length - 1].publishTime * 1000;  // самый поздний пост тайтла
+      if (firstPostMs > state.lastVisit) {
+        // Тайтл дебютировал после границы — это новый тайтл.
         state.newTitles.push(manga.name);
       } else {
-        const lastPostTime = manga.posts.length > 0 ? manga.posts[manga.posts.length - 1].publishTime * 1000 : 0;
         const userData = state.user_data[manga.name] || { status: 'none' };
         const isTracking = userData.status === 'watching' || userData.status === 'favorite';
-        const hasNewChapters = isTracking && lastPostTime > state.lastVisit && manga.readCount < manga.posts.length;
-        if (hasNewChapters) {
+        // По умолчанию «Новые главы» только для отслеживаемых; showAllNewChapters снимает ограничение.
+        const includeChapters = devSettings.showAllNewChapters ? true : isTracking;
+        if (includeChapters && lastPostMs > state.lastVisit && manga.readCount < manga.posts.length) {
           state.newChapters.push(manga.name);
         }
       }
@@ -1008,13 +1004,15 @@ function analyzeNewContent(oldPosts, freshPosts) {
     return;
   }
 
-  // В обычном режиме:
+  // Первая синхронизация (база пуста): новинок ещё нет, только фиксируем границу визита.
   if (!oldPosts || oldPosts.length === 0) {
-    // Это первая синхронизация, списки оставляем пустыми, но фиксируем lastVisit
     state.lastVisit = Date.now();
     saveStateToStorage();
     return;
   }
+
+  // Обычный режим (в т.ч. после выключения эмуляции): новизна — по разнице составов
+  // oldPosts → freshPosts. Списки «Новых» накапливаются, очищаются кнопкой «Очистить всё».
 
   const oldPostIds = new Set(oldPosts.map(p => p.id));
   const oldGrouped = getGroupedTitlesInternal(oldPosts);
@@ -1033,7 +1031,10 @@ function analyzeNewContent(oldPosts, freshPosts) {
       } else {
         const userData = state.user_data[manga.name] || { status: 'none' };
         const isTracking = userData.status === 'watching' || userData.status === 'favorite';
-        if (isTracking && manga.readCount < manga.posts.length) {
+        // По умолчанию «Новые главы» только для отслеживаемых тайтлов. Дев-переключатель
+        // showAllNewChapters снимает это ограничение (для проверки эмуляции).
+        const includeChapters = (DEV && devSettings.showAllNewChapters) ? true : isTracking;
+        if (includeChapters && manga.readCount < manga.posts.length) {
           if (!state.newChapters.includes(manga.name)) {
             state.newChapters.push(manga.name);
             updated = true;

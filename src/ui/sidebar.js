@@ -821,6 +821,7 @@ function setSidebarDeps(d) {
               devSettings.cutoffDate = '';
               devSettings.hideAboutAuthor = true;
               devSettings.alwaysShowReactions = true;
+              devSettings.showAllNewChapters = false;
               applyDevSettingsEffects();
             }
 
