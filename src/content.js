@@ -28,7 +28,8 @@ import {
   isWebDavConfigured,
   triggerAutoWebDavSync,
   performWebDavSync,
-  backgroundSync
+  backgroundSync,
+  analyzeNewContent
 } from './sync.js';
 import {
   setSidebarDeps,
@@ -318,6 +319,7 @@ export {
   formatDate,
   arePostsEqual,
   getGroupedTitles,
+  analyzeNewContent,
   checkAndTriggerOpenChat,
   syncActiveTitleFromUrl,
   getWebDavOrigin,

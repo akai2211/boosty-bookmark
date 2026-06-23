@@ -150,11 +150,19 @@ function getGroupedTitlesInternal(posts) {
       statusColor = 'yellow';
     }
     
+    // Новизна хранится по СТАБИЛЬНОМУ ключу тайтла (tagId), а не по отображаемому имени:
+    // иначе при переименовании тайтла («красивые имена» из описания блога) запись осиротеет
+    // и тайтл самопроизвольно пропадёт с вкладки «Новые». У «Объявлений» tagId пустой —
+    // для них ключ это константное имя. Доп. проверка по имени — обратная совместимость
+    // со старыми записями, которые хранились по имени.
+    const isNovel = (list) => Array.isArray(list) &&
+      ((title.tagId && list.includes(title.tagId)) || list.includes(title.name));
+
     // Вычисляем является ли тайтл Новым (добавлен после нашего последнего захода)
-    const isNewTitle = Array.isArray(state.newTitles) && state.newTitles.includes(title.name);
-    
+    const isNewTitle = isNovel(state.newTitles);
+
     // Проверяем есть ли новые главы
-    const hasNewChapters = Array.isArray(state.newChapters) && state.newChapters.includes(title.name);
+    const hasNewChapters = isNovel(state.newChapters);
     
     // Определяем категорию (тир подписки) тайтла на основе подписок его постов
     let category = 'Бесплатные';

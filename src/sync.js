@@ -974,6 +974,10 @@ async function backgroundSync() {
 
 // Анализ новых постов и добавление тайтлов в списки Новые тайтлы / Новые главы
 function analyzeNewContent(oldPosts, freshPosts) {
+  // Ключ новизны — стабильный tagId тайтла (для «Объявлений» с пустым id — имя).
+  // Так запись переживает переименование тайтла («красивые имена»), см. grouping.js.
+  const keyOf = (manga) => manga.tagId || manga.name;
+
   // Дев-эмуляция: «Новые» пересчитываются целиком от границы lastVisit по текущей базе.
   // Так результат не зависит ни от порядка действий, ни от того, что было в базе раньше,
   // а переключатель showAllNewChapters применяется сразу при следующем сохранении.
@@ -989,14 +993,14 @@ function analyzeNewContent(oldPosts, freshPosts) {
       const lastPostMs = manga.posts[manga.posts.length - 1].publishTime * 1000;  // самый поздний пост тайтла
       if (firstPostMs > state.lastVisit) {
         // Тайтл дебютировал после границы — это новый тайтл.
-        state.newTitles.push(manga.name);
+        state.newTitles.push(keyOf(manga));
       } else {
         const userData = state.user_data[manga.name] || { status: 'none' };
         const isTracking = userData.status === 'watching' || userData.status === 'favorite';
         // По умолчанию «Новые главы» только для отслеживаемых; showAllNewChapters снимает ограничение.
         const includeChapters = devSettings.showAllNewChapters ? true : isTracking;
         if (includeChapters && lastPostMs > state.lastVisit && manga.readCount < manga.posts.length) {
-          state.newChapters.push(manga.name);
+          state.newChapters.push(keyOf(manga));
         }
       }
     });
@@ -1023,9 +1027,10 @@ function analyzeNewContent(oldPosts, freshPosts) {
   newGrouped.forEach(manga => {
     const hasNewPosts = manga.posts.some(post => !oldPostIds.has(post.id));
     if (hasNewPosts) {
+      const key = keyOf(manga);
       if (!oldTitleNames.has(manga.name)) {
-        if (!state.newTitles.includes(manga.name)) {
-          state.newTitles.push(manga.name);
+        if (!state.newTitles.includes(key) && !state.newTitles.includes(manga.name)) {
+          state.newTitles.push(key);
           updated = true;
         }
       } else {
@@ -1035,8 +1040,8 @@ function analyzeNewContent(oldPosts, freshPosts) {
         // showAllNewChapters снимает это ограничение (для проверки эмуляции).
         const includeChapters = (DEV && devSettings.showAllNewChapters) ? true : isTracking;
         if (includeChapters && manga.readCount < manga.posts.length) {
-          if (!state.newChapters.includes(manga.name)) {
-            state.newChapters.push(manga.name);
+          if (!state.newChapters.includes(key) && !state.newChapters.includes(manga.name)) {
+            state.newChapters.push(key);
             updated = true;
           }
         }

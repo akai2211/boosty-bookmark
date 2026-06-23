@@ -383,4 +383,80 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
       expect(content.state.ui.activeTitle).toBeNull();
     });
   });
+
+  describe('analyzeNewContent — новизна по стабильному tagId (регресс)', () => {
+    beforeEach(() => {
+      content.state.newTitles = [];
+      content.state.newChapters = [];
+      content.state.lastVisit = 0;
+      content.state.blogDescriptionLinks = [];
+      content.state.user_data = {};
+      content.state.settings = { syncLikes: false };
+    });
+
+    it('должен регистрировать новый тайтл по tagId, а не по отображаемому имени', () => {
+      const oldPosts = [
+        { id: 'old-1', title: 'Старый', publishTime: 50, tags: [{ id: 'tag-0', title: 'Старый' }], subscriptionLevel: 'free', isLiked: false }
+      ];
+      const freshPosts = [
+        ...oldPosts,
+        { id: 'new-1', title: 'Дебют', publishTime: 200, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: false }
+      ];
+      content.state.posts = freshPosts;
+
+      content.analyzeNewContent(oldPosts, freshPosts);
+
+      // Ключ — стабильный tagId, а не имя
+      expect(content.state.newTitles).toContain('tag-1');
+      expect(content.state.newTitles).not.toContain('Реинкарнация');
+    });
+
+    it('новый тайтл НЕ должен пропадать с вкладки «Новые» после переименования (красивые имена)', () => {
+      const oldPosts = [
+        { id: 'old-1', title: 'Старый', publishTime: 50, tags: [{ id: 'tag-0', title: 'Старый' }], subscriptionLevel: 'free', isLiked: false }
+      ];
+      const freshPosts = [
+        ...oldPosts,
+        { id: 'new-1', title: 'Дебют', publishTime: 200, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: false }
+      ];
+      content.state.posts = freshPosts;
+      content.analyzeNewContent(oldPosts, freshPosts);
+
+      // Автор позже задал «красивое имя» для тега — отображаемое имя тайтла меняется
+      content.state.blogDescriptionLinks = [
+        { url: 'https://boosty.to/slug/posts?postsTagsIds=tag-1', title: 'Реинкарнация бездельника' }
+      ];
+
+      const renamed = content.getGroupedTitles().find(g => g.name === 'Реинкарнация бездельника');
+      expect(renamed).toBeDefined();
+      // Несмотря на смену имени, тайтл остаётся новым (матч по tagId)
+      expect(renamed.isNewTitle).toBe(true);
+      // И именно по tagId, а не по новому имени (старый баг хранил по имени и здесь бы потерял запись)
+      expect(content.state.newTitles).toContain('tag-1');
+      expect(content.state.newTitles).not.toContain('Реинкарнация бездельника');
+    });
+
+    it('новые главы отслеживаемого тайтла переживают переименование', () => {
+      const oldPosts = [
+        { id: 'c1', title: 'Глава 1', publishTime: 50, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: false }
+      ];
+      content.state.user_data['Реинкарнация'] = { status: 'watching', notes: '', readPosts: [], updatedAt: 0 };
+      const freshPosts = [
+        ...oldPosts,
+        { id: 'c2', title: 'Глава 2', publishTime: 100, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: false }
+      ];
+      content.state.posts = freshPosts;
+
+      content.analyzeNewContent(oldPosts, freshPosts);
+      expect(content.state.newChapters).toContain('tag-1');
+
+      // Переименование
+      content.state.blogDescriptionLinks = [
+        { url: 'https://boosty.to/slug/posts?postsTagsIds=tag-1', title: 'Реинкарнация бездельника' }
+      ];
+      const renamed = content.getGroupedTitles().find(g => g.name === 'Реинкарнация бездельника');
+      expect(renamed).toBeDefined();
+      expect(renamed.hasNewChapters).toBe(true);
+    });
+  });
 });

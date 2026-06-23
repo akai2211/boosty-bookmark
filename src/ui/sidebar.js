@@ -1754,15 +1754,21 @@ function setSidebarDeps(d) {
     parent.appendChild(groupContainer);
   }
 
-  function clearTitleNovelty(titleName) {
+  function clearTitleNovelty(manga) {
+    // Новизна хранится по стабильному tagId (фолбэк — имя), плюс старые записи могли
+    // храниться по имени. Снимаем по всем возможным ключам тайтла.
+    const keys = (typeof manga === 'string'
+      ? [manga]
+      : [manga && manga.tagId, manga && manga.name]).filter(Boolean);
+    if (keys.length === 0) return;
     let changed = false;
-    if (state.newTitles && state.newTitles.includes(titleName)) {
-      state.newTitles = state.newTitles.filter(name => name !== titleName);
-      changed = true;
+    if (Array.isArray(state.newTitles)) {
+      const next = state.newTitles.filter(k => !keys.includes(k));
+      if (next.length !== state.newTitles.length) { state.newTitles = next; changed = true; }
     }
-    if (state.newChapters && state.newChapters.includes(titleName)) {
-      state.newChapters = state.newChapters.filter(name => name !== titleName);
-      changed = true;
+    if (Array.isArray(state.newChapters)) {
+      const next = state.newChapters.filter(k => !keys.includes(k));
+      if (next.length !== state.newChapters.length) { state.newChapters = next; changed = true; }
     }
     if (changed) {
       saveStateToStorage();
@@ -1797,7 +1803,7 @@ function setSidebarDeps(d) {
       if (manga.name === 'Объявления') {
         state.ui.sortAsc = false;
       }
-      clearTitleNovelty(manga.name);
+      clearTitleNovelty(manga);
       render();
     });
 
@@ -1806,7 +1812,7 @@ function setSidebarDeps(d) {
       if (deleteBtn) {
         deleteBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          clearTitleNovelty(manga.name);
+          clearTitleNovelty(manga);
           render();
         });
       }
