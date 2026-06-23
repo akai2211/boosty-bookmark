@@ -76,8 +76,8 @@
   position: fixed;
   --lf-zoom-val: var(--lf-zoom, 1);
   zoom: var(--lf-zoom-val);
-  top: 56px;
-  height: calc((100vh - 56px) / var(--lf-zoom-val));
+  top: calc(var(--lf-header-h, 70px) / var(--lf-zoom-val));
+  height: calc((100vh - var(--lf-header-h, 70px)) / var(--lf-zoom-val));
   right: 0;
   width: 380px;
   z-index: 99998;
@@ -1703,8 +1703,8 @@
 /* Dev Sidebar Container on the Left side */
 #lf-dev-sidebar {
   position: fixed;
-  top: 56px;
-  height: calc(100vh - 56px);
+  top: var(--lf-header-h, 70px);
+  height: calc(100vh - var(--lf-header-h, 70px));
   left: 0;
   width: 320px;
   z-index: 99998;

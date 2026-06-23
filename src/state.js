@@ -39,6 +39,7 @@ let state = {
     sidebarOpen: false, // Состояние открытости панели (сохраняется)
     openTitlesInCurrentTab: true, // Открывать тайтлы в текущей вкладке
     openChaptersInFeed: true, // Искать и открывать главы в ленте тайтла
+    groupAllViewed: true, // Выносить тайтлы с 100% прогрессом в группу «Просмотрены все главы»
     titleSort: 'name_asc' // Сортировка тайтлов: 'name_asc', 'name_desc', 'new_desc', 'new_asc', 'chapters_desc', 'chapters_asc', 'progress_desc', 'progress_asc'
   },
 

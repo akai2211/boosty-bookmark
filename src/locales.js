@@ -93,6 +93,8 @@ const locales = {
       settings_open_chapters_feed_desc: 'При клике на главу переходить на страницу тайтла и скроллить к посту в ленте вместо открытия отдельной страницы поста.',
       settings_save_player_label: 'Запоминать время видео и аудио',
       settings_save_player_desc: 'Автоматически восстанавливать прогресс воспроизведения медиаплееров Boosty.',
+      settings_group_all_viewed_label: 'Группа «Просмотрены все главы»',
+      settings_group_all_viewed_desc: 'Выносить тайтлы с 100% прогрессом в отдельную свёрнутую группу в разделе «Смотрю». Тайтл возвращается в основной список при выходе новой главы.',
       settings_force_video_quality_label: 'Принудительное качество видео',
       settings_force_video_quality_desc: 'Запоминать и принудительно устанавливать качество видео в плеере.',
       settings_video_quality_label: 'Предпочитаемое качество',
@@ -124,6 +126,8 @@ const locales = {
       notify_open_titles_new: 'Тайтлы открываются в новой вкладке',
       notify_chapters_feed_on: 'Включен переход к главам в ленте',
       notify_chapters_feed_off: 'Включено открытие отдельных страниц глав',
+      notify_group_all_viewed_on: 'Группа «Просмотрены все главы» включена',
+      notify_group_all_viewed_off: 'Группа «Просмотрены все главы» отключена',
       notify_zoom_changed: 'Масштаб изменен на {0}%',
       notify_data_deleted: 'Все данные успешно удалены',
       notify_title_moved: 'Тайтлы перенесен в раздел «{0}»',
@@ -189,7 +193,8 @@ const locales = {
 
 
 
-      // Группа "Завершен том" в Смотрю
+      // Группы в «Смотрю»
+      group_all_viewed: 'Просмотрены все главы',
       group_volume_finished: 'Завершен том',
       group_fully_finished: 'Полностью озвучено',
       group_announcements: 'Объявления',
@@ -346,6 +351,8 @@ const locales = {
       settings_open_chapters_feed_desc: 'When clicking a chapter, navigate to the title page and scroll to the post in the feed instead of opening the direct post page.',
       settings_save_player_label: 'Remember audio & video time',
       settings_save_player_desc: 'Automatically restore playback progress in Boosty media players.',
+      settings_group_all_viewed_label: '"All chapters viewed" group',
+      settings_group_all_viewed_desc: 'Move titles with 100% progress to a separate collapsed group in the "Watching" tab. A title returns to the main list when a new chapter is released.',
       settings_force_video_quality_label: 'Force Video Quality',
       settings_force_video_quality_desc: 'Remember and force set video quality in the player.',
       settings_video_quality_label: 'Preferred Quality',
@@ -377,6 +384,8 @@ const locales = {
       notify_open_titles_new: 'Titles open in new tab',
       notify_chapters_feed_on: 'Enabled scroll-to-post in feed',
       notify_chapters_feed_off: 'Enabled opening direct chapter pages',
+      notify_group_all_viewed_on: '"All chapters viewed" group enabled',
+      notify_group_all_viewed_off: '"All chapters viewed" group disabled',
       notify_zoom_changed: 'Scale changed to {0}%',
       notify_data_deleted: 'All data has been successfully deleted',
       notify_title_moved: 'Title moved to "{0}"',
@@ -443,6 +452,7 @@ const locales = {
 
 
       // Group "Volume finished" in Watching
+      group_all_viewed: 'All chapters viewed',
       group_volume_finished: 'Volume finished',
       group_fully_finished: 'Fully finished',
       group_announcements: 'Announcements',
@@ -543,6 +553,7 @@ const locales = {
     'Новые главы (в подписках)': 'group_new_chapters',
     'Новые тайтлы': 'group_new_titles',
     'Новые главы': 'group_new_chapters_short',
+    'Просмотрены все главы': 'group_all_viewed',
     'Завершен том': 'group_volume_finished',
     'Полностью озвучено': 'group_fully_finished'
   };

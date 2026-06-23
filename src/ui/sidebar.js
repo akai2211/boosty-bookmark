@@ -50,6 +50,21 @@ let getPlayerProgressForPost = () => null;
 let applyDevSettingsEffects = () => {};
 let devSettings = { enabled: false, cutoffDate: '', hideAboutAuthor: true, alwaysShowReactions: true };
 
+let _headerResizeObserver = null;
+
+function updateHeaderTop() {
+  const topMenu = document.getElementById('TopMenu');
+  const h = topMenu ? topMenu.getBoundingClientRect().bottom : 70;
+  document.documentElement.style.setProperty('--lf-header-h', h + 'px');
+}
+
+function cleanupHeaderObserver() {
+  if (_headerResizeObserver) {
+    _headerResizeObserver.disconnect();
+    _headerResizeObserver = null;
+  }
+}
+
 function setSidebarDeps(d) {
   if (d.getPlayerProgressForPost) getPlayerProgressForPost = d.getPlayerProgressForPost;
   if (d.applyDevSettingsEffects) applyDevSettingsEffects = d.applyDevSettingsEffects;
@@ -119,6 +134,14 @@ function setSidebarDeps(d) {
     });
     
     document.body.appendChild(sidebar);
+    updateHeaderTop();
+    if (!_headerResizeObserver) {
+      const topMenu = document.getElementById('TopMenu');
+      if (topMenu) {
+        _headerResizeObserver = new ResizeObserver(updateHeaderTop);
+        _headerResizeObserver.observe(topMenu);
+      }
+    }
     detectAndApplyTheme();
   }
 
@@ -537,6 +560,14 @@ function setSidebarDeps(d) {
           </div>
 
           <div class="lf-settings-row">
+            <label class="lf-settings-label" for="lf-setting-group-all-viewed">
+              ${t('settings_group_all_viewed_label')}
+              <div class="lf-settings-desc">${t('settings_group_all_viewed_desc')}</div>
+            </label>
+            <input type="checkbox" id="lf-setting-group-all-viewed" class="lf-settings-checkbox" ${state.settings.groupAllViewed !== false ? 'checked' : ''}>
+          </div>
+
+          <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-save-player">
               ${t('settings_save_player_label')}
               <div class="lf-settings-desc">${t('settings_save_player_desc')}</div>
@@ -837,6 +868,7 @@ function setSidebarDeps(d) {
               sidebarOpen: true,
               openTitlesInCurrentTab: true,
               openChaptersInFeed: true,
+              groupAllViewed: true,
               forceVideoQuality: false,
               videoQuality: '1080p'
             };
@@ -962,6 +994,16 @@ function setSidebarDeps(d) {
         state.settings.openChaptersInFeed = e.target.checked;
         saveStateToStorage();
         showNotification(e.target.checked ? t('notify_chapters_feed_on') : t('notify_chapters_feed_off'));
+      });
+    }
+
+    const groupAllViewedCheckbox = document.getElementById('lf-setting-group-all-viewed');
+    if (groupAllViewedCheckbox) {
+      groupAllViewedCheckbox.addEventListener('change', (e) => {
+        state.settings.groupAllViewed = e.target.checked;
+        saveStateToStorage();
+        showNotification(e.target.checked ? t('notify_group_all_viewed_on') : t('notify_group_all_viewed_off'));
+        render();
       });
     }
 
@@ -1422,26 +1464,34 @@ function setSidebarDeps(d) {
       return;
     }
     
-    // Для вкладки «Смотрю» отделяем завершенные тома в свернутую группу внизу
+    // Для вкладки «Смотрю» отделяем завершенные тома и все просмотренные в свёрнутые группы внизу
     if (state.ui.activeTab === 'watching') {
-      const normalWatching = filtered.filter(t => !(t.isVolumeFinished && t.readCount === t.posts.length && t.posts.length > 0));
-      const volumeFinishedWatching = filtered.filter(t => t.isVolumeFinished && t.readCount === t.posts.length && t.posts.length > 0);
+      const isVolFinished = t => t.isVolumeFinished && t.readCount === t.posts.length && t.posts.length > 0;
+      const isAllViewed = t => !t.isVolumeFinished && t.readCount === t.posts.length && t.posts.length > 0;
 
-      if (normalWatching.length > 0 || volumeFinishedWatching.length === 0) {
+      const volumeFinishedWatching = filtered.filter(isVolFinished);
+      const allViewedWatching = state.settings.groupAllViewed ? filtered.filter(isAllViewed) : [];
+      const normalWatching = filtered.filter(t => !isVolFinished(t) && !(state.settings.groupAllViewed && isAllViewed(t)));
+
+      if (normalWatching.length > 0 || (volumeFinishedWatching.length === 0 && allViewedWatching.length === 0)) {
         const listDiv = document.createElement('div');
         listDiv.className = 'lf-group-container';
         listDiv.style.backgroundColor = 'transparent';
         listDiv.style.border = 'none';
-        
+
         const listContent = document.createElement('div');
         listContent.className = 'lf-group-list';
-        
+
         normalWatching.forEach(manga => {
           listContent.appendChild(createMangaRow(manga));
         });
-        
+
         listDiv.appendChild(listContent);
         container.appendChild(listDiv);
+      }
+
+      if (allViewedWatching.length > 0) {
+        renderGroup(container, 'Просмотрены все главы', allViewedWatching);
       }
 
       if (volumeFinishedWatching.length > 0) {
@@ -2181,5 +2231,6 @@ export {
   clearTitleNovelty,
   moveTab,
   dragAndDropReorder,
-  setSidebarDeps
+  setSidebarDeps,
+  cleanupHeaderObserver
 };

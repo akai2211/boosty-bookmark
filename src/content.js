@@ -38,7 +38,8 @@ import {
   createSidebar,
   createTriggerButton,
   renderListContent,
-  renderSettingsContent
+  renderSettingsContent,
+  cleanupHeaderObserver
 } from './ui/sidebar.js';
 import {
   setNavigationDeps,
@@ -94,6 +95,8 @@ function cleanup() {
 
   // Удаляем слушатель сообщений от page_script.js
   if (eventHandlers.messageHandler) window.removeEventListener('message', eventHandlers.messageHandler);
+
+  cleanupHeaderObserver();
 
   // Удаляем внедрённые DOM-элементы
   const btn = document.getElementById('lf-trigger-btn');
