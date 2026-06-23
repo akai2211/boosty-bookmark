@@ -11,17 +11,15 @@ import {
   applyMergedChannelToState
 } from './state.js';
 import * as BoostyBookmarkSync from './webdav-sync.js';
+import { getGroupedTitles, getGroupedTitlesInternal } from './grouping.js';
 
-// Внешние зависимости (UI-рендер, уведомления, группировка тайтлов, dev-настройки,
-// общий объект обработчиков событий), внедряются из content.js через setSyncDeps().
-// Разрывает цикл sync ↔ sidebar: render/showNotification/getGroupedTitles живут в
-// монолитном content.js и переедут в ui/sidebar.js (этап 7) / state.js позже.
+// Внешние зависимости (UI-рендер, уведомления, dev-настройки, общий объект
+// обработчиков событий), внедряются из content.js через setSyncDeps().
+// Разрывает цикл sync ↔ sidebar: render/showNotification живут в ui/sidebar.js.
 let render = () => {};
 let renderListContent = () => {};
 let renderSettingsContent = () => {};
 let showNotification = () => {};
-let getGroupedTitles = () => [];
-let getGroupedTitlesInternal = () => [];
 let devSettings = { enabled: false, cutoffDate: '', alwaysShowReactions: true };
 let eventHandlers = {};
 
@@ -30,8 +28,6 @@ function setSyncDeps(d) {
   if (d.renderListContent) renderListContent = d.renderListContent;
   if (d.renderSettingsContent) renderSettingsContent = d.renderSettingsContent;
   if (d.showNotification) showNotification = d.showNotification;
-  if (d.getGroupedTitles) getGroupedTitles = d.getGroupedTitles;
-  if (d.getGroupedTitlesInternal) getGroupedTitlesInternal = d.getGroupedTitlesInternal;
   if (d.devSettings) devSettings = d.devSettings;
   if (d.eventHandlers) eventHandlers = d.eventHandlers;
 }
@@ -981,6 +977,86 @@ function analyzeNewContent(oldPosts, freshPosts) {
   }
 }
 
+
+// -------------------------------------------------------------
+// РЕАКЦИИ BOOSTY (лайки)
+// -------------------------------------------------------------
+// Отправка лайка (реакции) на пост в Boosty
+async function sendBoostyReaction(postId) {
+  const token = getBoostyAuthToken();
+  if (!token) {
+    console.warn('Не удалось поставить лайк на Boosty: токен авторизации отсутствует.');
+    return;
+  }
+  
+  try {
+    const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/${postId}/reaction?from_page=blog`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({ reaction: 'heart' }),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      console.warn(`Не удалось поставить лайк на Boosty (статус ${response.status}):`, text);
+      return;
+    }
+    
+    console.log(`Лайк успешно отправлен на Boosty для поста ${postId}`);
+    
+    // Обновляем локальный кэш поста, чтобы при ререндере он отображался как лайкнутый
+    const post = state.posts.find(p => String(p.id) === String(postId));
+    if (post) post.isLiked = true;
+    
+  } catch (e) {
+    console.warn('Не удалось отправить реакцию на Boosty:', e);
+  }
+}
+
+// Удаление лайка (реакции) с поста на Boosty
+async function removeBoostyReaction(postId) {
+  const token = getBoostyAuthToken();
+  if (!token) {
+    console.warn('Не удалось снять лайк на Boosty: токен авторизации отсутствует.');
+    return;
+  }
+  
+  try {
+    const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/${postId}/reaction?from_page=blog`;
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({ reaction: 'heart' }),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      console.warn(`Не удалось снять лайк на Boosty (статус ${response.status}):`, text);
+      return;
+    }
+    
+    console.log(`Лайк успешно снят на Boosty для поста ${postId}`);
+    
+    // Обновляем локальный кэш поста
+    const post = state.posts.find(p => String(p.id) === String(postId));
+    if (post) post.isLiked = false;
+    
+  } catch (e) {
+    console.warn('Не удалось снять реакцию на Boosty:', e);
+  }
+}
+
 export {
   setSyncDeps,
   patchFetch,
@@ -1006,5 +1082,7 @@ export {
   performIncrementalSync,
   performFullSync,
   backgroundSync,
-  analyzeNewContent
+  analyzeNewContent,
+  sendBoostyReaction,
+  removeBoostyReaction
 };

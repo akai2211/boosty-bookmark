@@ -2,16 +2,10 @@
  * релизной сборки tree-shaking'ом: все точки входа в content.js гейтятся if (DEV),
  * поэтому экспорты остаются без ссылок при DEV=false. */
 
-import { isExtensionContextValid } from '../utils.js';
+import { isExtensionContextValid, formatSyncDate } from '../utils.js';
 import { state, saveStateToStorage } from '../state.js';
 import { performIncrementalSync } from '../sync.js';
 import { render, showNotification } from './sidebar.js';
-
-// Внешняя зависимость formatSyncDate остаётся в content.js — внедряется через setDevtoolsDeps().
-let formatSyncDate = () => '';
-function setDevtoolsDeps(d) {
-  if (d.formatSyncDate) formatSyncDate = d.formatSyncDate;
-}
 
   let devSettings = {
     enabled: false,
@@ -475,7 +469,6 @@ function hideDevToolsUI() {
 
 export {
   devSettings,
-  setDevtoolsDeps,
   loadDevSettings,
   saveDevSettings,
   applyDevSettingsEffects,

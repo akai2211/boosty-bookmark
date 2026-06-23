@@ -10,7 +10,8 @@ import {
   escapeHtml,
   getUsdtAddress,
   formatDate,
-  formatSeconds
+  formatSeconds,
+  formatSyncDate
 } from '../utils.js';
 import {
   state,
@@ -28,8 +29,11 @@ import {
   performWebDavSync,
   saveWebDavSettingsFromForm,
   performIncrementalSync,
-  performFullSync
+  performFullSync,
+  sendBoostyReaction,
+  removeBoostyReaction
 } from '../sync.js';
+import { getGroupedTitles } from '../grouping.js';
 import {
   triggerButtonIcon,
   sidebarLoadingTemplate,
@@ -39,24 +43,16 @@ import {
   getStatusTooltip
 } from './templates.js';
 
-// Внешние зависимости, остающиеся в content.js (группировка тайтлов, прогресс
-// плеера, dev-эффекты, реакции Boosty, формат даты синка, dev-настройки).
-// Внедряются через setSidebarDeps() — разрывает цикл sidebar ↔ content.js.
-let getGroupedTitles = () => [];
+// Внешние зависимости, остающиеся в content.js (прогресс плеера, dev-эффекты,
+// dev-настройки). Внедряются через setSidebarDeps() — разрывает цикл sidebar ↔ content.js.
+// Dev-зависимости (applyDevSettingsEffects, devSettings) проводятся только под if (DEV).
 let getPlayerProgressForPost = () => null;
 let applyDevSettingsEffects = () => {};
-let sendBoostyReaction = () => {};
-let removeBoostyReaction = () => {};
-let formatSyncDate = () => '';
 let devSettings = { enabled: false, cutoffDate: '', hideAboutAuthor: true, alwaysShowReactions: true };
 
 function setSidebarDeps(d) {
-  if (d.getGroupedTitles) getGroupedTitles = d.getGroupedTitles;
   if (d.getPlayerProgressForPost) getPlayerProgressForPost = d.getPlayerProgressForPost;
   if (d.applyDevSettingsEffects) applyDevSettingsEffects = d.applyDevSettingsEffects;
-  if (d.sendBoostyReaction) sendBoostyReaction = d.sendBoostyReaction;
-  if (d.removeBoostyReaction) removeBoostyReaction = d.removeBoostyReaction;
-  if (d.formatSyncDate) formatSyncDate = d.formatSyncDate;
   if (d.devSettings) devSettings = d.devSettings;
 }
 

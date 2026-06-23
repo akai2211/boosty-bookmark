@@ -1,6 +1,6 @@
 /* utils.js — Утилиты и константы Boosty Bookmark. */
 
-import { t } from './locales.js';
+import { t, getCurrentLang } from './locales.js';
 
 const BLOG_SLUG = 'lightfoxmanga';
 const STORAGE_KEY = `lf_state_${BLOG_SLUG}`;
@@ -100,6 +100,21 @@ function formatSeconds(seconds) {
   return `${mins}:${formattedSecs}`;
 }
 
+// Форматирование даты последней WebDAV-синхронизации с учётом языка интерфейса
+function formatSyncDate(timestamp) {
+  if (!timestamp) return t('settings_webdav_never_sync');
+  const date = new Date(timestamp);
+  const isEn = (typeof getCurrentLang === 'function' ? getCurrentLang() : 'ru') === 'en';
+  const dateLocale = isEn ? 'en-US' : 'ru-RU';
+  return date.toLocaleString(dateLocale, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
 export {
   BLOG_SLUG,
   STORAGE_KEY,
@@ -115,5 +130,6 @@ export {
   isExtensionContextValid,
   formatDate,
   arePostsEqual,
-  formatSeconds
+  formatSeconds,
+  formatSyncDate
 };

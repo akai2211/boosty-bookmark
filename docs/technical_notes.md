@@ -454,9 +454,9 @@
 
 ---
 
-## 30. Модульная архитектура и сборка через esbuild (рефакторинг content.js)
+## 30. Модульная архитектура и сборка через esbuild
 
-> Внедряется поэтапно в рамках рефакторинга монолита `content.js` (см. `docs/split_plan.md`). На момент написания выполнены этапы 1a и 1b (инфраструктура); выделение модулей в `src/` продолжается на этапах 2–11.
+> Рефакторинг монолита `content.js` **завершён** (все этапы 1a–11, см. `docs/split_plan.md`). Источник правды — ES-модули в `src/`; корневой `content.js` собирается esbuild. Раздел описывает итоговую архитектуру.
 
 ### 30.1 Источник правды — `src/`, `content.js` — артефакт
 Исходный код переезжает в папку `src/` (ES-модули). Корневой `content.js` теперь **результат бандла** esbuild и **не коммитится** (внесён в `.gitignore`: `/content.js`, `/content.js.map`; убран из индекса через `git rm --cached`). Свежий клон/worktree собирает бандл командой `npm run build:js`. Перед загрузкой расширения в браузер обязательно держать запущенным `npm run watch:js`, иначе грузится устаревший бандл.
@@ -481,6 +481,31 @@
 * `manifest.json` подключается через `import manifest from '../manifest.json'` (Vitest резолвит JSON нативно);
 * в E2E (`tests/extension.spec.js`) `__dirname` восстановлен из `import.meta.url` (в ESM он недоступен);
 * добавлен npm-хук `"pretest": "npm run build:js"` — гарантирует свежий бандл перед `npm test` (E2E грузит `content.js` из корня).
+
+### 30.6 Карта модулей `src/`
+Монолит разбит на 12 ES-модулей. Каждый модуль отвечает за одну предметную область:
+
+| Модуль | Назначение |
+|---|---|
+| `src/content.js` | **Точка входа** (~330 строк): импорты модулей, `init()`/`cleanup()`/`checkUrlAndToggleVisibility()`, проводка зависимостей (`setXxxDeps`), запуск URL-интервала и слушателей верхнего уровня. |
+| `src/locales.js` | Локализация: `t`/`tCategory`/`getCurrentLang`. Бандлится внутрь. |
+| `src/utils.js` | Константы (`BLOG_SLUG`, ключи хранилища, `TAGS_BLACKLIST`, `TAB_NAMES`, SVG-пути) и чистые утилиты (`escapeHtml`, `getUsdtAddress`, `isExtensionContextValid`, `formatDate`, `arePostsEqual`, `formatSeconds`, `formatSyncDate`). |
+| `src/state.js` | Состояние (`state`, `webdavConfig`) и работа с `chrome.storage.local`: загрузка/сохранение, бейдж, экспорт/импорт ZIP, WebDAV-конфиг, слияние каналов. |
+| `src/grouping.js` | Группировка постов по тайтлам/тегам и вычисление прогресса (`getGroupedTitles`/`getGroupedTitlesInternal`). Самодостаточен (только state/utils). |
+| `src/sync.js` | Синхронизация с API Boosty (incremental/full/background, описание блога, анализ новинок), перехват реакций (`patchFetch`), отправка/снятие лайков (`sendBoostyReaction`/`removeBoostyReaction`), WebDAV-клиент (`performWebDavSync` и хелперы). |
+| `src/navigation.js` | Навигация и автоскролл: целевая страница, скролл к посту/ленте, автооткрытие чата, синхронизация активного тайтла по URL, перехват History API. |
+| `src/players.js` | Интеграция с медиаплеерами VK (Shadow DOM): автозапоминание времени, принудительное качество, отслеживание прогресса. Самодостаточен. |
+| `src/webdav-sync.js` | Низкоуровневый WebDAV-провайдер. Бандлится внутрь. |
+| `src/ui/templates.js` | Чистые HTML-шаблоны интерфейса без побочных эффектов. |
+| `src/ui/sidebar.js` | Рендеринг боковой панели: каркас, списки тайтлов, детальный вид, настройки, «О расширении», уведомления, drag&drop сортировка. |
+| `src/ui/devtools.js` | Панель разработчика (**DEV-only**). Целиком вырезается из релиза tree-shaking'ом (все точки входа под `if (DEV)`). |
+
+### 30.7 Разрыв циклов через внедрение зависимостей (`setXxxDeps`)
+Граф импортов однонаправленный: `utils ← locales`; `state ← utils`; `grouping ← state, utils`; `sync ← state, utils, grouping`; `navigation ← utils, state, grouping`; `players ← state, utils`; `ui/sidebar ← state, utils, sync, grouping, templates`; `ui/devtools ← utils, state, sync, ui/sidebar`. Эти импорты делаются **напрямую**.
+
+Там, где прямой импорт создал бы цикл (например, `sync` нужен `render` из `ui/sidebar`, а `ui/sidebar` импортирует `sync`), модуль объявляет **перепривязываемые dep-локали** (`let render = () => {}`) и экспортирует setter `setXxxDeps(d)`. `content.js` в начале `init()` вызывает `setStateDeps`/`setSyncDeps`/`setSidebarDeps`/`setNavigationDeps`, подставляя реальные реализации. Так циклы разорваны, а тела функций при переезде копировались дословно.
+
+**Dev-зависимости** (`devSettings`, `applyDevSettingsEffects` из `ui/devtools.js`) проводятся в `sync`/`sidebar` **только под `if (DEV)`** — иначе ссылка на них удержала бы `ui/devtools.js` в релизной сборке и сломала tree-shaking (см. §30.3).
 
 
 

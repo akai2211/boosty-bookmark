@@ -3,18 +3,17 @@
 
 import { BLOG_SLUG, isExtensionContextValid } from './utils.js';
 import { state } from './state.js';
+import { getGroupedTitles } from './grouping.js';
 
-// Внешние зависимости (рендер UI, группировка тайтлов, оркестрация видимости,
-// очистка, общий объект обработчиков), внедряются из content.js через setNavigationDeps().
+// Внешние зависимости (рендер UI, оркестрация видимости, очистка, общий объект
+// обработчиков), внедряются из content.js через setNavigationDeps().
 let render = () => {};
-let getGroupedTitles = () => [];
 let checkUrlAndToggleVisibility = () => {};
 let cleanup = () => {};
 let eventHandlers = {};
 
 function setNavigationDeps(d) {
   if (d.render) render = d.render;
-  if (d.getGroupedTitles) getGroupedTitles = d.getGroupedTitles;
   if (d.checkUrlAndToggleVisibility) checkUrlAndToggleVisibility = d.checkUrlAndToggleVisibility;
   if (d.cleanup) cleanup = d.cleanup;
   if (d.eventHandlers) eventHandlers = d.eventHandlers;
