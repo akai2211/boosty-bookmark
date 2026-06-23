@@ -533,6 +533,116 @@ function getBoostyAuthToken() {
   }
 }
 
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+// Преобразование поста из API Boosty в компактный формат для хранения
+function toCompactPost(p) {
+  return {
+    id: p.id,
+    title: p.title || 'Без названия',
+    publishTime: p.publishTime,
+    isLiked: !!p.isLiked,
+    subscriptionLevel: p.subscriptionLevel ? {
+      name: p.subscriptionLevel.name,
+      id: p.subscriptionLevel.id
+    } : null,
+    tags: (p.tags || []).map(t => ({
+      id: t.id,
+      title: t.title.trim()
+    }))
+  };
+}
+
+// Запрос одной страницы постов с ретраями и экспоненциальным backoff.
+// Лечит обрывы из-за rate-limit Boosty: при серии быстрых запросов API
+// отвечает 429/5xx (часто без CORS-заголовков → fetch реджектится), что
+// раньше роняло весь цикл синхронизации. Здесь такие ответы пережидаются.
+async function fetchPostsPage(offset, limit, maxAttempts = 4) {
+  const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/?limit=${limit}` + (offset ? `&offset=${offset}` : '');
+  let lastErr = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const headers = {};
+      const token = getBoostyAuthToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const response = await fetch(url, { headers, credentials: 'include' });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      // 4xx (кроме 429) — повтор не поможет (нет прав / неверный запрос), выходим сразу
+      if (response.status !== 429 && response.status < 500) {
+        const err = new Error(`HTTP error! status: ${response.status}`);
+        err.nonRetryable = true;
+        throw err;
+      }
+
+      // 429 / 5xx — перегрузка или rate-limit: подождать и повторить
+      lastErr = new Error(`HTTP error! status: ${response.status}`);
+      if (attempt < maxAttempts) {
+        const retryAfter = parseInt(response.headers.get('Retry-After'), 10);
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : 1000 * Math.pow(2, attempt - 1); // 1с, 2с, 4с…
+        await sleep(waitMs);
+      }
+    } catch (e) {
+      if (e && e.nonRetryable) throw e;
+      // Сетевой сбой / CORS на ошибочном ответе (fetch реджектится) — повторяем
+      lastErr = e;
+      if (attempt < maxAttempts) await sleep(1000 * Math.pow(2, attempt - 1));
+    }
+  }
+  throw lastErr || new Error('fetchPostsPage: превышено число попыток');
+}
+
+// Чекпоинт незавершённой полной синхронизации (для докачки после обрыва).
+// Хранится отдельным ключом, НЕ внутри lf_state_* — поэтому не попадает в
+// ручной бэкап и WebDAV (они фильтруют ключи по префиксу lf_state_).
+const FULL_SYNC_RESUME_KEY = `lf_full_sync_resume_${BLOG_SLUG}`;
+
+function loadFullSyncResume() {
+  return new Promise((resolve) => {
+    if (!isExtensionContextValid()) { resolve(null); return; }
+    try {
+      chrome.storage.local.get([FULL_SYNC_RESUME_KEY], (res) => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        const cp = res[FULL_SYNC_RESUME_KEY];
+        resolve(cp && Array.isArray(cp.posts) ? cp : null);
+      });
+    } catch (e) { resolve(null); }
+  });
+}
+
+function saveFullSyncResume(offset, posts) {
+  return new Promise((resolve) => {
+    if (!isExtensionContextValid()) { resolve(); return; }
+    try {
+      chrome.storage.local.set({ [FULL_SYNC_RESUME_KEY]: { offset, posts, ts: Date.now() } }, () => {
+        void chrome.runtime.lastError; // игнорируем ошибку записи чекпоинта
+        resolve();
+      });
+    } catch (e) { resolve(); }
+  });
+}
+
+function clearFullSyncResume() {
+  return new Promise((resolve) => {
+    if (!isExtensionContextValid()) { resolve(); return; }
+    try {
+      chrome.storage.local.remove(FULL_SYNC_RESUME_KEY, () => {
+        void chrome.runtime.lastError;
+        resolve();
+      });
+    } catch (e) { resolve(); }
+  });
+}
+
 // Синхронизация описания блога для получения красивых названий тайтлов
 async function syncBlogDescription() {
   try {
@@ -620,15 +730,8 @@ async function performIncrementalSync() {
       state.ui.syncProgress = Math.min(95, page * 15);
       render();
 
-      const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/?limit=${limit}` + (offset ? `&offset=${offset}` : '');
-      const headers = {};
-      const token = getBoostyAuthToken();
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const response = await fetch(url, { headers, credentials: 'include' });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-      const result = await response.json();
+      // Запрос страницы с ретраями/backoff — переживает rate-limit Boosty
+      const result = await fetchPostsPage(offset, limit);
       const pagePosts = result.data || [];
 
       if (!pagePosts.length) {
@@ -644,20 +747,7 @@ async function performIncrementalSync() {
             }
           }
         }
-        const fresh = {
-          id: p.id,
-          title: p.title || 'Без названия',
-          publishTime: p.publishTime,
-          isLiked: !!p.isLiked,
-          subscriptionLevel: p.subscriptionLevel ? {
-            name: p.subscriptionLevel.name,
-            id: p.subscriptionLevel.id
-          } : null,
-          tags: (p.tags || []).map(t => ({
-            id: t.id,
-            title: t.title.trim()
-          }))
-        };
+        const fresh = toCompactPost(p);
 
         const existing = postMap.get(String(fresh.id));
 
@@ -731,10 +821,14 @@ async function performFullSync() {
   state.ui.syncProgress = 0;
   render();
 
-  let allPosts = [];
-  let offset = '';
-  let page = 0;
   const limit = 100;
+
+  // Докачка: если прошлая полная синхронизация оборвалась (rate-limit и т.п.),
+  // продолжаем с сохранённого места, а не скачиваем все посты заново.
+  const resume = await loadFullSyncResume();
+  let allPosts = resume ? resume.posts : [];
+  let offset = resume ? (resume.offset || '') : '';
+  let page = 0;
 
   try {
     await syncBlogDescription();
@@ -744,15 +838,8 @@ async function performFullSync() {
       state.ui.syncProgress = Math.min(95, page * 7);
       render();
 
-      const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/?limit=${limit}` + (offset ? `&offset=${offset}` : '');
-      const headers = {};
-      const token = getBoostyAuthToken();
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const response = await fetch(url, { headers, credentials: 'include' });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-      const result = await response.json();
+      // Запрос страницы с ретраями/backoff — переживает rate-limit Boosty
+      const result = await fetchPostsPage(offset, limit);
       const pagePosts = result.data || [];
 
       let filteredPagePosts = pagePosts;
@@ -763,23 +850,7 @@ async function performFullSync() {
         }
       }
 
-      // Преобразуем посты в компактный формат для хранения
-      const processed = filteredPagePosts.map(p => ({
-        id: p.id,
-        title: p.title || 'Без названия',
-        publishTime: p.publishTime,
-        isLiked: !!p.isLiked,
-        subscriptionLevel: p.subscriptionLevel ? {
-          name: p.subscriptionLevel.name,
-          id: p.subscriptionLevel.id
-        } : null,
-        tags: (p.tags || []).map(t => ({
-          id: t.id,
-          title: t.title.trim()
-        }))
-      }));
-
-      allPosts.push(...processed);
+      allPosts.push(...filteredPagePosts.map(toCompactPost));
 
       const extra = result.extra || {};
       if (extra.isLast || !pagePosts.length) {
@@ -787,12 +858,21 @@ async function performFullSync() {
       }
       offset = extra.offset || '';
 
+      // Сохраняем чекпоинт после каждой страницы — при обрыве докачаем с этого места
+      await saveFullSyncResume(offset, allPosts);
+
       // Небольшая задержка, чтобы не спамить сервер
-      await new Promise(r => setTimeout(r, 200));
+      await sleep(250);
     }
 
+    // Дедуп по id (на случай докачки с перекрытием) и сортировка «новые сверху»
+    const dedup = new Map();
+    for (const p of allPosts) dedup.set(String(p.id), p);
+    const finalPosts = Array.from(dedup.values());
+    finalPosts.sort((a, b) => b.publishTime - a.publishTime);
+
     const oldPosts = [...state.posts];
-    state.posts = allPosts;
+    state.posts = finalPosts;
     state.collapsedGroups = {};
     state.ui.syncProgress = 100;
 
@@ -807,12 +887,15 @@ async function performFullSync() {
     }
 
     await saveStateToStorage();
+    await clearFullSyncResume(); // успешно докачали — чекпоинт больше не нужен
 
     // Оповещение об успешной синхронизации
     showNotification(t('notify_sync_success'));
 
   } catch (e) {
-    console.error('Ошибка синхронизации Boosty:', e);
+    // Чекпоинт уже сохранён по последней успешной странице — следующий запуск
+    // («Попробуйте ещё раз») продолжит докачку, а не начнёт с нуля.
+    console.error('Ошибка синхронизации Boosty (прогресс сохранён для докачки):', e);
     showNotification(t('notify_sync_posts_error'));
   } finally {
     state.ui.isSyncing = false;
@@ -852,20 +935,7 @@ async function backgroundSync() {
       const existing = postMap.get(p.id);
 
       // Обрабатываем свежие данные поста
-      const fresh = {
-        id: p.id,
-        title: p.title || 'Без названия',
-        publishTime: p.publishTime,
-        isLiked: !!p.isLiked,
-        subscriptionLevel: p.subscriptionLevel ? {
-          name: p.subscriptionLevel.name,
-          id: p.subscriptionLevel.id
-        } : null,
-        tags: (p.tags || []).map(t => ({
-          id: t.id,
-          title: t.title.trim()
-        }))
-      };
+      const fresh = toCompactPost(p);
 
       if (!existing) {
         // Новый пост! Добавляем в начало
