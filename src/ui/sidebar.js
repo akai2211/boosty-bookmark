@@ -535,12 +535,6 @@ function setSidebarDeps(d) {
             </label>
             <input type="checkbox" id="lf-setting-open-chapters-in-feed" class="lf-settings-checkbox" ${state.settings.openChaptersInFeed ? 'checked' : ''}>
           </div>
-          <div id="lf-beta-warning" class="lf-beta-warning" style="display: none;">
-            <div class="lf-beta-warning-text">
-              ${t('settings_beta_warning_text')}
-            </div>
-            <button id="lf-beta-warning-close" class="lf-beta-warning-close" title="&times;">&times;</button>
-          </div>
 
           <div class="lf-settings-row">
             <label class="lf-settings-label" for="lf-setting-save-player">
@@ -842,7 +836,7 @@ function setSidebarDeps(d) {
               zoomMigrated: true,
               sidebarOpen: true,
               openTitlesInCurrentTab: true,
-              openChaptersInFeed: false,
+              openChaptersInFeed: true,
               forceVideoQuality: false,
               videoQuality: '1080p'
             };
@@ -968,21 +962,6 @@ function setSidebarDeps(d) {
         state.settings.openChaptersInFeed = e.target.checked;
         saveStateToStorage();
         showNotification(e.target.checked ? t('notify_chapters_feed_on') : t('notify_chapters_feed_off'));
-        
-        const warningBlock = document.getElementById('lf-beta-warning');
-        if (warningBlock) {
-          warningBlock.style.display = e.target.checked ? 'flex' : 'none';
-        }
-      });
-    }
-
-    const warningCloseBtn = document.getElementById('lf-beta-warning-close');
-    if (warningCloseBtn) {
-      warningCloseBtn.addEventListener('click', () => {
-        const warningBlock = document.getElementById('lf-beta-warning');
-        if (warningBlock) {
-          warningBlock.style.display = 'none';
-        }
       });
     }
 

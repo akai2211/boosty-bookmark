@@ -31,6 +31,8 @@ let lastCheckedChatUrl = null;
   let lastScrolledUrl = null;
   let lastScrolledPostId = null;
   let lastProcessedTagParam = null;
+  // ID активного цикла скролла-к-посту (для остановки при смене главы / cleanup)
+  let scrollToPostIntervalId = null;
 
   // Вспомогательная функция проверки наличия хэша поста в URL
   function hasPostHash() {
@@ -38,7 +40,69 @@ let lastCheckedChatUrl = null;
     return /^#post-[a-f0-9-]+/i.test(hash);
   }
 
-  // Автоматический скролл к конкретному посту по хэшу #post-[postId] в URL
+  // Поиск элемента поста в ленте Boosty по его ID (ссылку из панели расширения исключаем)
+  function findFeedPostElement(postId) {
+    const sidebar = document.getElementById('lf-sidebar');
+    const links = document.querySelectorAll(`a[href*="${postId}" i]`);
+    for (const link of links) {
+      if (sidebar && sidebar.contains(link)) continue;
+      return link.closest('[class*="Post-scss--module_root"]') || link;
+    }
+    return null;
+  }
+
+  // Поиск кнопки «Загрузить еще» ленты (RU/EN). Лента Boosty грузит первые порции
+  // постов автоскроллом, но после нескольких порций показывает кнопку, которую нужно
+  // кликнуть, иначе подгрузка встаёт. Исключаем кнопки комментариев и невидимые.
+  function findFeedLoadMoreButton() {
+    const buttons = document.querySelectorAll('button');
+    for (const btn of buttons) {
+      const text = (btn.textContent || '').trim().toLowerCase();
+      if (!/(загрузить (еще|ещё)|load more|show more)/.test(text)) continue;
+      if (/коммент|comment/.test(text)) continue;
+      if (btn.closest('[class*="omment"]')) continue;
+      if (btn.offsetParent === null) continue; // невидимая
+      return btn;
+    }
+    return null;
+  }
+
+  // Подгрузка следующей порции постов в ленте. Целимся в конец КОЛОНКИ ПОСТОВ
+  // (а не в document.scrollHeight — правая колонка с тирами выше колонки постов, и
+  // прыжок в самый низ документа перелетает зону триггера ленивой подгрузки). Если
+  // позиция скролла не изменилась с прошлого раза («парковка»), сентинел подгрузки
+  // уже сработал и не пере-сработает — делаем «толчок» вверх, чтобы на следующем
+  // тике он снова вошёл в зону видимости. Возвращает новую целевую позицию скролла.
+  function nudgeFeedToLoadMore(prevTarget) {
+    const posts = document.querySelectorAll('[class*="Post-scss--module_root"]');
+    const last = posts[posts.length - 1];
+    const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    let target = maxScroll;
+    if (last) {
+      const lastBottom = last.getBoundingClientRect().bottom + window.pageYOffset;
+      target = Math.min(lastBottom - window.innerHeight * 0.5, maxScroll); // конец постов в нижней части экрана
+    }
+    target = Math.max(0, target);
+    if (prevTarget !== null && Math.abs(target - prevTarget) < 8) {
+      // «Парковка» — подгрузка встала. Толчок вверх, чтобы пере-взвести сентинел.
+      window.scrollTo(0, Math.max(0, target - window.innerHeight * 0.7));
+      return null; // сбрасываем, чтобы следующий тик снова прицелился в конец постов
+    }
+    window.scrollTo(0, target);
+    return target;
+  }
+
+  // Установка целевого поста в верх области просмотра (под шапкой Boosty)
+  function scrollPostToTop(targetElement, behavior) {
+    const yOffset = -80; // 56px шапка Boosty + 24px воздух
+    const y = targetElement.getBoundingClientRect().top + window.pageYOffset + yOffset;
+    window.scrollTo({ top: y, behavior: behavior || 'auto' });
+  }
+
+  // Автоматический скролл к конкретному посту по хэшу #post-[postId] в URL.
+  // Двухфазный цикл: (1) догружаем посты (скролл + клики «Загрузить еще»), пока
+  // целевой пост не появится в ленте; (2) приземляемся на него и удерживаем позицию,
+  // пока лэйаут не стабилизируется (догрузка медиа выше может «сдвигать» цель).
   function checkAndScrollToPost() {
     if (!isTargetPage()) return;
 
@@ -48,52 +112,76 @@ let lastCheckedChatUrl = null;
 
     const postId = match[1];
     const currentUrl = window.location.href;
-    
+
     // Предотвращаем бесконечные повторные попытки скроллинга к тому же самому посту
     if (currentUrl === lastScrolledPostId) return;
     lastScrolledPostId = currentUrl;
 
-    let attempts = 0;
-    const maxAttempts = 30; // ~15 секунд при 500мс интервале
+    // Останавливаем предыдущий цикл, если пользователь быстро переключил главу
+    if (scrollToPostIntervalId) {
+      clearInterval(scrollToPostIntervalId);
+      scrollToPostIntervalId = null;
+    }
 
-    const interval = setInterval(() => {
+    let attempts = 0;
+    const maxAttempts = 50; // ~30 секунд при 600мс — хватает на догрузку 40+ постов
+    let lastCount = -1;
+    let stagnantTicks = 0;
+    let foundTarget = null;
+    let stabilizeTicks = 0;
+    let lastTop = null;
+    let prevScrollTarget = null;
+
+    scrollToPostIntervalId = setInterval(() => {
       attempts++;
 
-      // Ищем ссылку на этот пост в ленте (исключая панель расширения)
-      const allLinks = document.querySelectorAll(`a[href*="${postId}" i]`);
-      let linkElement = null;
-      const sidebar = document.getElementById('lf-sidebar');
-      for (const link of allLinks) {
-        if (sidebar && sidebar.contains(link)) continue;
-        linkElement = link;
-        break;
-      }
-
-      if (linkElement) {
-        clearInterval(interval);
-
-        // Находим родительский элемент поста
-        const postElement = linkElement.closest('[class*="Post-scss--module_root"]');
-        const targetElement = postElement || linkElement;
-
-        const yOffset = -80; // 56px шапка Boosty + 24px воздух
-        const rect = targetElement.getBoundingClientRect();
-        const y = rect.top + window.pageYOffset + yOffset;
-
-        window.scrollTo({ top: y, behavior: 'smooth' });
+      // --- Фаза 2: цель найдена, приземляемся и ждём стабилизации позиции ---
+      if (foundTarget) {
+        const top = Math.round(foundTarget.getBoundingClientRect().top + window.pageYOffset);
+        if (lastTop === null) {
+          scrollPostToTop(foundTarget, 'smooth'); // первичное плавное приземление
+        } else if (Math.abs(top - lastTop) >= 4) {
+          scrollPostToTop(foundTarget, 'auto'); // лэйаут «поехал» — мгновенная коррекция
+          stabilizeTicks = 0;
+        } else {
+          stabilizeTicks++;
+        }
+        lastTop = top;
+        if (stabilizeTicks >= 2 || attempts >= maxAttempts) {
+          clearInterval(scrollToPostIntervalId);
+          scrollToPostIntervalId = null;
+        }
         return;
       }
 
-      // Прокручиваем вниз для подгрузки новых постов только после 5 неудачных попыток (~2.5 сек),
-      // чтобы дать странице время на первичный рендеринг без резких прыжков.
-      if (attempts > 5) {
-        window.scrollTo(0, document.documentElement.scrollHeight);
+      // --- Фаза 1: догружаем посты, пока не появится целевой ---
+      const target = findFeedPostElement(postId);
+      if (target) {
+        foundTarget = target; // позиционирование — со следующего тика (кадр на лэйаут)
+        return;
       }
 
-      if (attempts >= maxAttempts) {
-        clearInterval(interval);
+      const n = document.querySelectorAll('[class*="Post-scss--module_root"]').length;
+      if (n > lastCount) { lastCount = n; stagnantTicks = 0; }
+      else stagnantTicks++;
+
+      // Кнопка «Загрузить еще» имеет приоритет: лента отдаёт первые порции
+      // автоскроллом, но затем требует явного клика, иначе подгрузка встаёт.
+      const btn = findFeedLoadMoreButton();
+      if (btn) {
+        btn.click();
+        prevScrollTarget = null;
+        stagnantTicks = 0;
+      } else {
+        prevScrollTarget = nudgeFeedToLoadMore(prevScrollTarget);
       }
-    }, 500);
+
+      // Долго нет прироста и нет кнопки догрузки → поста в ленте нет, выходим.
+      if (attempts >= maxAttempts || (stagnantTicks >= 12 && !btn)) {
+        clearInterval(scrollToPostIntervalId);
+        scrollToPostIntervalId = null;
+      }
+    }, 600);
   }
 
   // Автоматический скролл к ленте постов, если в URL есть параметры фильтрации (теги)
@@ -309,6 +397,10 @@ function resetNavScrollState() {
   lastScrolledUrl = null;
   lastScrolledPostId = null;
   lastProcessedTagParam = null;
+  if (scrollToPostIntervalId) {
+    clearInterval(scrollToPostIntervalId);
+    scrollToPostIntervalId = null;
+  }
 }
 
 // Сброс только обработанного тег-параметра (вызывается из checkUrlAndToggleVisibility)
