@@ -170,7 +170,7 @@ async function checkUrlAndToggleVisibility() {
 
 // Инициализация расширения
 async function init() {
-  let version = '0.8.0';
+  let version = '0.9.0';
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getManifest === 'function') {
       const manifest = chrome.runtime.getManifest();
