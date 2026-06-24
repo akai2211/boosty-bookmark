@@ -575,31 +575,26 @@ function setSidebarDeps(d) {
             <input type="checkbox" id="lf-setting-save-player" class="lf-settings-checkbox" ${state.settings.savePlayerTime ? 'checked' : ''}>
           </div>
 
-          <!-- Временно заморожено: функция не работает из-за изменений на стороне Boosty/VK -->
-          <div style="display: none;">
-            <div class="lf-settings-row">
-              <label class="lf-settings-label" for="lf-setting-force-video-quality">
-                ${t('settings_force_video_quality_label')}
-                <div class="lf-settings-desc">${t('settings_force_video_quality_desc')}</div>
-              </label>
-              <input type="checkbox" id="lf-setting-force-video-quality" class="lf-settings-checkbox" ${state.settings.forceVideoQuality ? 'checked' : ''}>
-            </div>
+          <div class="lf-settings-row">
+            <label class="lf-settings-label" for="lf-setting-force-video-quality">
+              ${t('settings_force_video_quality_label')}
+              <div class="lf-settings-desc">${t('settings_force_video_quality_desc')}</div>
+            </label>
+            <input type="checkbox" id="lf-setting-force-video-quality" class="lf-settings-checkbox" ${state.settings.forceVideoQuality ? 'checked' : ''}>
+          </div>
 
-            <div class="lf-settings-row" id="lf-setting-video-quality-container" style="${state.settings.forceVideoQuality ? '' : 'opacity: 0.5; pointer-events: none;'}">
-              <label class="lf-settings-label" for="lf-setting-video-quality">
-                ${t('settings_video_quality_label')}
-              </label>
-              <select id="lf-setting-video-quality" class="lf-settings-select" ${state.settings.forceVideoQuality ? '' : 'disabled'}>
-                <option value="2160p" ${state.settings.videoQuality === '2160p' ? 'selected' : ''}>2160p</option>
-                <option value="1440p" ${state.settings.videoQuality === '1440p' ? 'selected' : ''}>1440p</option>
-                <option value="1080p" ${state.settings.videoQuality === '1080p' ? 'selected' : ''}>1080p</option>
-                <option value="720p" ${state.settings.videoQuality === '720p' ? 'selected' : ''}>720p</option>
-                <option value="480p" ${state.settings.videoQuality === '480p' ? 'selected' : ''}>480p</option>
-                <option value="360p" ${state.settings.videoQuality === '360p' ? 'selected' : ''}>360p</option>
-                <option value="240p" ${state.settings.videoQuality === '240p' ? 'selected' : ''}>240p</option>
-                <option value="144p" ${state.settings.videoQuality === '144p' ? 'selected' : ''}>144p</option>
-              </select>
-            </div>
+          <div class="lf-settings-row" id="lf-setting-video-quality-container" style="${state.settings.forceVideoQuality ? '' : 'opacity: 0.5; pointer-events: none;'}">
+            <label class="lf-settings-label" for="lf-setting-video-quality">
+              ${t('settings_video_quality_label')}
+            </label>
+            <select id="lf-setting-video-quality" class="lf-settings-select" ${state.settings.forceVideoQuality ? '' : 'disabled'}>
+              <option value="1080p" ${state.settings.videoQuality === '1080p' ? 'selected' : ''}>1080p</option>
+              <option value="720p" ${state.settings.videoQuality === '720p' ? 'selected' : ''}>720p</option>
+              <option value="480p" ${state.settings.videoQuality === '480p' ? 'selected' : ''}>480p</option>
+              <option value="360p" ${state.settings.videoQuality === '360p' ? 'selected' : ''}>360p</option>
+              <option value="240p" ${state.settings.videoQuality === '240p' ? 'selected' : ''}>240p</option>
+              <option value="144p" ${state.settings.videoQuality === '144p' ? 'selected' : ''}>144p</option>
+            </select>
           </div>
 
           <div class="lf-settings-row">
@@ -958,8 +953,10 @@ function setSidebarDeps(d) {
         const checked = e.target.checked;
         state.settings.forceVideoQuality = checked;
         saveStateToStorage();
+        // Передаём настройку в page_script (применится к видео, открытым после изменения)
+        window.postMessage({ type: 'LF_SET_QUALITY_PREF', enabled: checked, value: checked ? (state.settings.videoQuality || 'auto') : 'auto' }, '*');
         showNotification(checked ? t('notify_force_video_quality_on') : t('notify_force_video_quality_off'));
-        
+
         if (videoQualitySelect) {
           videoQualitySelect.disabled = !checked;
         }
@@ -975,6 +972,8 @@ function setSidebarDeps(d) {
         const val = e.target.value;
         state.settings.videoQuality = val;
         saveStateToStorage();
+        // Передаём обновлённое качество в page_script (применится к следующим открытым видео)
+        window.postMessage({ type: 'LF_SET_QUALITY_PREF', enabled: !!state.settings.forceVideoQuality, value: state.settings.forceVideoQuality ? val : 'auto' }, '*');
         showNotification(t('notify_video_quality_changed', val));
       });
     }

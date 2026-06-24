@@ -329,10 +329,61 @@
     }
   }
 
+  // =====================================================================
+  // ПРИНУДИТЕЛЬНОЕ КАЧЕСТВО VK-ПЛЕЕРА
+  // =====================================================================
+  // Кнопку настроек VK-плеера нельзя открыть программно (нужен trusted-клик),
+  // поэтому качество выставляется не кликами по меню, а через localStorage-ключ
+  // `vk_player_preferred_quality`, который плеер сам читает при инициализации.
+  // Ключ привязан к videoId конкретного видео; плеер сверяет pref.videoId со своим
+  // и стирает запись при несовпадении. videoId доступен из store плеера ровно в
+  // момент чтения ключа, поэтому мы перехватываем getItem и подставляем актуальный
+  // videoId + желаемое качество на лету. Настройка приходит из content.js.
+
+  const VK_QUALITY_KEY = 'vk_player_preferred_quality';
+  let qualityPref = { enabled: false, value: 'auto' };
+
+  // Возвращает videoId плеера, инициализирующегося в момент чтения ключа.
+  // store.videoId — публичное свойство Svelte-компонента vk-video-player (main world).
+  function getActiveVkVideoId() {
+    const players = document.querySelectorAll('vk-video-player');
+    for (const p of players) {
+      try {
+        const vid = (p.store && p.store.videoId) ||
+          (p.videoConfig && p.videoConfig.videos && p.videoConfig.videos[0] && p.videoConfig.videos[0].unitedVideoId);
+        if (vid) return String(vid);
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  const originalGetItem = Storage.prototype.getItem;
+  Storage.prototype.getItem = function (key) {
+    if (key === VK_QUALITY_KEY && qualityPref.enabled && qualityPref.value && qualityPref.value !== 'auto') {
+      try {
+        const videoId = getActiveVkVideoId();
+        if (videoId) {
+          return JSON.stringify({ videoId, value: qualityPref.value });
+        }
+      } catch (e) {}
+    }
+    return originalGetItem.apply(this, arguments);
+  };
+
   // --- Слушатель сообщений от content.js ---
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
-    if (!event.data || event.data.type !== 'LF_TOGGLE_LIKE_DOM') return;
+    if (!event.data) return;
+
+    if (event.data.type === 'LF_SET_QUALITY_PREF') {
+      qualityPref = {
+        enabled: !!event.data.enabled,
+        value: event.data.value || 'auto'
+      };
+      return;
+    }
+
+    if (event.data.type !== 'LF_TOGGLE_LIKE_DOM') return;
 
     const { postId, isLiked } = event.data;
     if (postId) {

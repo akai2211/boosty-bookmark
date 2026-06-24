@@ -52,7 +52,7 @@ import {
   resetNavScrollState,
   resetProcessedTagParam
 } from './navigation.js';
-import { getPlayerProgressForPost, initPlayerTracking } from './players.js';
+import { getPlayerProgressForPost, initPlayerTracking, sendVideoQualityPref } from './players.js';
 import { getGroupedTitles } from './grouping.js';
 import {
   devSettings,
@@ -209,6 +209,10 @@ async function init() {
   if (DEV) {
     await loadDevSettings();
   }
+
+  // Отправляем настройку принудительного качества в page_script (main world) как можно
+  // раньше — чтобы VK-плеер успел прочитать подменённый localStorage-ключ при инициализации.
+  sendVideoQualityPref();
 
   // Восстанавливаем активный тайтл и вкладку из sessionStorage (для сохранения состояния текущей вкладки при перезагрузке)
   try {

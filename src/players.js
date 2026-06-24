@@ -203,134 +203,20 @@ import { state, saveStateToStorage } from './state.js';
   }
 
   /**
-   * Выбирает нужное разрешение из списка li.item-quality внутри playerWrapper.
-   * @param {HTMLElement} playerWrapper - Обертка плеера (.player-wrapper) из Shadow DOM
-   * @param {string} targetQuality - Целевое качество (например, "1080p")
-   * @returns {boolean} true если качество успешно установлено
+   * Передаёт настройку принудительного качества в page_script.js (main world).
+   * Сам выбор качества делается там через подмену localStorage-ключа
+   * `vk_player_preferred_quality`, который VK-плеер читает при инициализации
+   * (кнопку настроек плеера нельзя открыть программно — нужен trusted-клик).
+   * Качество применяется к видео, открываемым ПОСЛЕ установки настройки.
    */
-  function selectQualityOption(playerWrapper, targetQuality) {
-    const itemQualities = playerWrapper.querySelectorAll('li.item-quality');
-    
-    if (itemQualities.length === 0) {
-      return false;
-    }
-
-    // Ищем элемент с нужным качеством и кликаем по нему
-    for (const qualityEl of itemQualities) {
-      if (qualityEl.dataset.value === targetQuality) {
-        console.info(`[Boosty Bookmark] Установлено качество: ${targetQuality}`);
-        qualityEl.click();
-        return true;
-      }
-    }
-
-    // Если точное совпадение не найдено, выбираем первый доступный вариант (обычно максимальный)
-    const fallbackEl = itemQualities[0];
-    console.info(`[Boosty Bookmark] Качество ${targetQuality} недоступно. Выбрано: ${fallbackEl.dataset.value}`);
-    fallbackEl.click();
-    return true;
-  }
-
-  /**
-   * Находит пункт меню «Качество» в настройках плеера и кликает по нему,
-   * чтобы открыть подменю с вариантами разрешения.
-   * В новом VK-плеере меню двухуровневое:
-   *   1) li.item с текстом «Качество» / «Quality» → клик открывает подменю
-   *   2) li.item-quality[data-value="1080p"] → непосредственный выбор качества
-   * @param {HTMLElement} playerWrapper - Обертка плеера (.player-wrapper) из Shadow DOM
-   * @returns {boolean} true если пункт «Качество» найден и кликнут
-   */
-  function openQualitySubmenu(playerWrapper) {
-    const allItems = playerWrapper.querySelectorAll('li.item');
-    for (const item of allItems) {
-      const text = (item.innerText || '').toLowerCase();
-      if (text.includes('качество') || text.includes('quality')) {
-        item.click();
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Принудительно устанавливает качество видео: открывает подменю → выбирает разрешение.
-   * Поддерживает как старый формат VK-плеера (li.item-quality сразу в DOM),
-   * так и новый двухуровневый (li.item «Качество» → подменю li.item-quality).
-   * @param {HTMLElement} playerWrapper - Обертка плеера (.player-wrapper) из Shadow DOM
-   * @param {string} targetQuality - Целевое качество (например, "1080p")
-   */
-  function forceVideoQuality(playerWrapper, targetQuality) {
-    // Попытка 1: Старый формат — li.item-quality уже в DOM (как в старом VK-плеере)
-    if (selectQualityOption(playerWrapper, targetQuality)) {
-      return;
-    }
-
-    // Попытка 2: Новый формат — нужно открыть подменю «Качество»
-    if (!openQualitySubmenu(playerWrapper)) {
-      console.warn('[Boosty Bookmark] Пункт меню «Качество» не найден в настройках плеера.');
-      return;
-    }
-
-    // Ждём появления li.item-quality после открытия подменю
-    let attempts = 0;
-    const maxAttempts = 30; // 3 секунды (30 × 100мс)
-    const interval = setInterval(() => {
-      attempts++;
-      if (selectQualityOption(playerWrapper, targetQuality)) {
-        clearInterval(interval);
-      } else if (attempts >= maxAttempts) {
-        console.warn('[Boosty Bookmark] Качество не установлено: элементы li.item-quality не появились после открытия подменю.');
-        clearInterval(interval);
-      }
-    }, 100);
-  }
-
-  /**
-   * Инициализирует слежение за плеером и вешает триггер на клик
-   * @param {HTMLElement} shadowRootContainer - Контейнер .shadow-root-container веб-компонента
-   * @param {string} targetQuality - Целевое качество видео
-   */
-  function setupVideoPlayerQuality(shadowRootContainer, targetQuality) {
-    const shadowRoot = shadowRootContainer.shadowRoot;
-    if (!shadowRoot) {
-      console.warn('[Boosty Bookmark] shadowRoot не найден в контейнере плеера.');
-      return;
-    }
-
-    const attachClickListener = () => {
-      const playerWrapper = shadowRoot.querySelector('div.player-wrapper');
-      const clickTarget = shadowRoot.querySelector('div.player-wrapper div.container');
-
-      if (!playerWrapper || !clickTarget) {
-        return false;
-      }
-
-      // Вешаем однократный клик — при первом клике пользователя запускаем установку качества
-      clickTarget.addEventListener('click', () => {
-        // Даём плееру время инициализировать меню настроек после старта воспроизведения
-        setTimeout(() => {
-          forceVideoQuality(playerWrapper, targetQuality);
-        }, 300);
-      }, { once: true });
-
-      shadowRootContainer.dataset.lfQualityInjected = 'true';
-      return true;
-    };
-
-    // Пробуем подключиться сразу
-    if (attachClickListener()) return;
-
-    // Если элементы еще не отрендерились внутри shadowRoot, следим за изменениями
-    const observer = new MutationObserver((mutations, obs) => {
-      if (attachClickListener()) {
-        obs.disconnect();
-      }
-    });
-
-    observer.observe(shadowRoot, {
-      childList: true,
-      subtree: true
-    });
+  function sendVideoQualityPref() {
+    try {
+      window.postMessage({
+        type: 'LF_SET_QUALITY_PREF',
+        enabled: !!state.settings.forceVideoQuality,
+        value: state.settings.forceVideoQuality ? (state.settings.videoQuality || 'auto') : 'auto'
+      }, '*');
+    } catch (e) {}
   }
 
   // Поиск новых плееров на странице
@@ -358,17 +244,12 @@ import { state, saveStateToStorage } from './state.js';
           }
         }
       }
-
-      // Инициализация принудительного качества видео
-      if (state.settings.forceVideoQuality && container.dataset.lfQualityInjected !== 'true') {
-        const targetQuality = state.settings.videoQuality || '1080p';
-        setupVideoPlayerQuality(container, targetQuality);
-      }
     });
   }
 
 
 export {
   getPlayerProgressForPost,
-  initPlayerTracking
+  initPlayerTracking,
+  sendVideoQualityPref
 };

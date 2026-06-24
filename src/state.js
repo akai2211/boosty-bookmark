@@ -111,7 +111,6 @@ function loadStateFromStorage() {
         state.newChapters = saved.newChapters || [];
         if (saved.settings) {
           state.settings = { ...state.settings, ...saved.settings };
-          state.settings.forceVideoQuality = false; // Временно заморожено (не работает)
           // Миграция openTagsInCurrentTab -> openTitlesInCurrentTab
           if (saved.settings.openTagsInCurrentTab !== undefined && saved.settings.openTitlesInCurrentTab === undefined) {
             state.settings.openTitlesInCurrentTab = saved.settings.openTagsInCurrentTab;
