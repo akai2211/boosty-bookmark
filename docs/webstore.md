@@ -42,3 +42,32 @@
 > 💡 **Маленький совет:** Обрати особое внимание на раздел **Single Purpose Policy** (в политиках программы). Расширение должно выполнять *одну* четко выраженную функцию. Если комбайн умеет делать сразу всё, модераторы могут его отклонить и попросить разбить на несколько мелких плагинов.
 
 Если во время сборки ZIP-архива или настройки манифеста возникнут вопросы по ошибкам — пиши, разберемся!
+
+
+Google Chrome (Chrome Web Store):
+
+    Политика программы: [https://developer.chrome.com/docs/webstore/program-policies](https://developer.chrome.com/docs/webstore/program-policies)
+
+    Конфиденциальность данных: [https://developer.chrome.com/docs/webstore/user-data-faq](https://developer.chrome.com/docs/webstore/user-data-faq)
+
+    Инструкция по публикации: [https://developer.chrome.com/docs/webstore/publish](https://developer.chrome.com/docs/webstore/publish)
+
+    Требования к графике: [https://developer.chrome.com/docs/webstore/images](https://developer.chrome.com/docs/webstore/images)
+
+    Обзор Manifest V3: [https://developer.chrome.com/docs/extensions/develop/migrate/mv3-overview](https://developer.chrome.com/docs/extensions/develop/migrate/mv3-overview)
+
+    Чек-лист перед отправкой: [https://developer.chrome.com/docs/webstore/prepare-submission](https://developer.chrome.com/docs/webstore/prepare-submission)
+
+Mozilla Firefox (AMO):
+
+    Правила для разработчиков: [https://extensionworkshop.com/documentation/publish/add-on-policies/](https://extensionworkshop.com/documentation/publish/add-on-policies/)
+
+    Требования к исходному коду: [https://extensionworkshop.com/documentation/publish/source-code-submission/](https://extensionworkshop.com/documentation/publish/source-code-submission/)
+
+    Инструкция по отправке: [https://extensionworkshop.com/documentation/publish/submitting-an-add-on/](https://extensionworkshop.com/documentation/publish/submitting-an-add-on/)
+
+    Оформление карточки: [https://extensionworkshop.com/documentation/publish/create-an-appealing-listing/](https://extensionworkshop.com/documentation/publish/create-an-appealing-listing/)
+
+    Перенос расширения из Chrome: [https://extensionworkshop.com/documentation/develop/porting-an-extension-from-chrome/](https://extensionworkshop.com/documentation/develop/porting-an-extension-from-chrome/)
+
+    Валидатор кода (Linter): [https://extensionworkshop.com/documentation/develop/web-extensions-linter/](https://extensionworkshop.com/documentation/develop/web-extensions-linter/)
