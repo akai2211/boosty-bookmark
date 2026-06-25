@@ -2,7 +2,7 @@
  * релизной сборки tree-shaking'ом: все точки входа в content.js гейтятся if (DEV),
  * поэтому экспорты остаются без ссылок при DEV=false. */
 
-import { isExtensionContextValid, formatSyncDate } from '../utils.js';
+import { isExtensionContextValid, formatSyncDate, LF_INTERNAL_BUILD } from '../utils.js';
 import { state, saveStateToStorage } from '../state.js';
 import { performIncrementalSync } from '../sync.js';
 import { render, showNotification } from './sidebar.js';
@@ -307,7 +307,11 @@ import { render, showNotification } from './sidebar.js';
 
     devSidebar.innerHTML = `
       <div class="lf-dev-header">
-        <h3>Boosty Bookmark DevTools</h3>
+        <div>
+          <h3>Boosty Bookmark DevTools</h3>
+          <small class="lf-dev-build">build ${LF_INTERNAL_BUILD}</small>
+          <button id="lf-dev-reload-btn" class="lf-dev-reload" title="Перезагрузить расширение и страницу">⟳ Обновить расширение</button>
+        </div>
         <span class="lf-dev-close">×</span>
       </div>
       <div class="lf-dev-body">
@@ -359,6 +363,21 @@ import { render, showNotification } from './sidebar.js';
       const devBtn = document.getElementById('lf-dev-trigger-btn');
       if (devBtn) {
         devBtn.style.display = '';
+      }
+    });
+
+    // Перезагрузка расширения (через background SW) + страницы — чтобы быстро подхватить
+    // свежий код, не лазая в chrome://extensions. После reload расширения вкладку
+    // перезагружаем сами (page_script/content инжектятся заново).
+    devSidebar.querySelector('#lf-dev-reload-btn').addEventListener('click', () => {
+      try {
+        chrome.runtime.sendMessage({ action: 'RELOAD_EXTENSION' }, () => {
+          // ответ может не прийти (SW уже перезагружается) — игнорируем ошибку
+          void chrome.runtime.lastError;
+          setTimeout(() => location.reload(), 300);
+        });
+      } catch (e) {
+        location.reload();
       }
     });
 

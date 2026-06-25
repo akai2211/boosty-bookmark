@@ -256,12 +256,33 @@ function setSidebarDeps(d) {
     }, 500);
   }
 
+  // Шлёт в page_script полный список лайкнутых постов для проактивной подсветки сердечек.
+  // Дебаунс: render() дёргается часто (вкладки/тоглы), а пересинхрон нужен лишь когда DOM/лайки
+  // устаканились — коалесцируем всплески в одно сообщение.
+  let syncLikesTimeout;
+  function syncAllLikesToPage() {
+    clearTimeout(syncLikesTimeout);
+    syncLikesTimeout = setTimeout(() => {
+      if (!state.posts) return;
+      const likedIds = state.posts
+        .filter(p => p.isLiked)
+        .map(p => String(p.id));
+
+      window.postMessage({
+        type: 'LF_SYNC_ALL_LIKES',
+        likedIds
+      }, '*');
+    }, 200);
+  }
+
   // -------------------------------------------------------------
   // ОТРИСОВКА СОДЕРЖИМОГО (ОСНОВНОЙ РЕНДЕР)
   // -------------------------------------------------------------
   function render() {
     const sidebar = document.getElementById('lf-sidebar');
     if (!sidebar) return;
+
+    syncAllLikesToPage();
 
     const bodyContent = document.getElementById('lf-body-content');
     const savedScrollTop = bodyContent ? bodyContent.scrollTop : 0;
@@ -1768,10 +1789,11 @@ function setSidebarDeps(d) {
 
           if (e.target.checked) {
             sendBoostyReaction(postId);
-            window.postMessage({ type: 'LF_TOGGLE_LIKE_DOM', postId, isLiked: true }, '*');
+            // Косметически подсвечиваем сердечко на странице (без программного клика — он на текущей вёрстке не срабатывает)
+            window.postMessage({ type: 'LF_SET_LIKE_VISUAL', postId, isLiked: true }, '*');
           } else {
             removeBoostyReaction(postId);
-            window.postMessage({ type: 'LF_TOGGLE_LIKE_DOM', postId, isLiked: false }, '*');
+            window.postMessage({ type: 'LF_SET_LIKE_VISUAL', postId, isLiked: false }, '*');
           }
           
           const updatedManga = getGroupedTitles().find(t => t.name === manga.name);
@@ -2160,12 +2182,11 @@ function setSidebarDeps(d) {
         // Отправляем прямой запрос на обновление лайка на сервере Boosty
         if (e.target.checked) {
           sendBoostyReaction(postId);
-          // Дополнительно отправляем запрос в page_script.js для визуального обновления DOM
-          window.postMessage({ type: 'LF_TOGGLE_LIKE_DOM', postId, isLiked: true }, '*');
+          // Косметически подсвечиваем сердечко на странице (без программного клика — он на текущей вёрстке не срабатывает)
+          window.postMessage({ type: 'LF_SET_LIKE_VISUAL', postId, isLiked: true }, '*');
         } else {
           removeBoostyReaction(postId);
-          // Дополнительно отправляем запрос в page_script.js для визуального обновления DOM
-          window.postMessage({ type: 'LF_TOGGLE_LIKE_DOM', postId, isLiked: false }, '*');
+          window.postMessage({ type: 'LF_SET_LIKE_VISUAL', postId, isLiked: false }, '*');
         }
         
         // Обновляем циферки прогресса в заголовке

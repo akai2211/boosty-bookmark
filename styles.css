@@ -1746,6 +1746,34 @@
   color: #ff5722;
 }
 
+.lf-dev-build {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #888888;
+}
+
+.lf-dev-reload {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #ff5722;
+  background: transparent;
+  border: 1px solid rgba(255, 87, 34, 0.4);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.lf-dev-reload:hover {
+  background: rgba(255, 87, 34, 0.12);
+}
+
+.lf-dev-reload:active {
+  background: rgba(255, 87, 34, 0.25);
+}
+
 .lf-dev-close {
   font-size: 24px;
   cursor: pointer;

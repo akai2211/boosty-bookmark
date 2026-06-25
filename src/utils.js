@@ -2,6 +2,11 @@
 
 import { t, getCurrentLang } from './locales.js';
 
+// Внутренний build-маркер. Бампается при КАЖДОМ изменении кода расширения, чтобы
+// в DevTools было видно, что загружена свежая версия (отдельно от версии 0.9.0 манифеста).
+// Должен совпадать со значением в page_script.js (LF_INTERNAL_BUILD).
+const LF_INTERNAL_BUILD = '2026-06-26.6';
+
 const BLOG_SLUG = 'lightfoxmanga';
 const STORAGE_KEY = `lf_state_${BLOG_SLUG}`;
 const WEBDAV_CONFIG_KEY = 'lf_webdav_config';
@@ -138,6 +143,7 @@ function base64ToArrayBuffer(base64) {
 }
 
 export {
+  LF_INTERNAL_BUILD,
   BLOG_SLUG,
   STORAGE_KEY,
   WEBDAV_CONFIG_KEY,

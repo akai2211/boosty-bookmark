@@ -4,6 +4,7 @@
    корневой content.js собирается esbuild. */
 
 import {
+  LF_INTERNAL_BUILD,
   BLOG_SLUG,
   TAGS_BLACKLIST,
   TAB_NAMES,
@@ -183,7 +184,7 @@ async function init() {
       }
     }
   } catch (e) {}
-  console.log(`[Boosty Bookmark] Загружена версия ${version}`);
+  console.log(`[Boosty Bookmark] Загружена версия ${version} (build ${LF_INTERNAL_BUILD})`);
 
   // Внедряем зависимости в state.js (рендер/уведомления/синхронизация живут в модулях UI/sync)
   setStateDeps({ render, showNotification, performWebDavSync, isWebDavConfigured });

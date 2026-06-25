@@ -24,6 +24,14 @@ function arrayBufferToBase64(buffer) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'RELOAD_EXTENSION') {
+    sendResponse({ success: true });
+    setTimeout(() => {
+      chrome.runtime.reload();
+    }, 50);
+    return true;
+  }
+
   if (message.action === 'updateBadge') {
     const action = chrome.action || chrome.browserAction;
     if (action) {

@@ -499,54 +499,6 @@ async function saveWebDavSettingsFromForm() {
 // ЛОГИКА СИНХРОНИЗАЦИИ И АНАЛИЗА API
 // -------------------------------------------------------------
 
-// Попытка программного клика по кнопке лайка в DOM (если пост отрендерен на странице)
-function syncDomLike(postId, targetLikedState) {
-  try {
-    // Ищем ссылки на пост ТОЛЬКО на основной странице (вне нашего sidebar)
-    const allLinks = document.querySelectorAll(`a[href*="${postId}" i]`);
-    let pageLink = null;
-    const sidebar = document.getElementById('lf-sidebar');
-
-    for (const link of allLinks) {
-      if (sidebar && sidebar.contains(link)) continue; // Пропускаем ссылки из нашего расширения
-      pageLink = link;
-      break;
-    }
-
-    if (!pageLink) return false;
-
-    let current = pageLink;
-    let likeBtn = null;
-    let maxDepth = 15;
-
-    while (current && current !== document.body && maxDepth > 0) {
-      current = current.parentElement;
-      maxDepth--;
-
-      const btns = current.querySelectorAll('[data-test-id="COMMON_REACTIONS_REACTIONSPOST:ROOT"]');
-      if (btns.length === 1) {
-        likeBtn = btns[0];
-        break;
-      }
-    }
-
-    if (likeBtn) {
-      const isCurrentlyLiked = likeBtn.getAttribute('data-active') === 'true';
-      if (isCurrentlyLiked !== targetLikedState) {
-        likeBtn.click();
-        console.log(`[BoostyBookmark] DOM-клик лайка для поста ${postId}`);
-        return true;
-      } else {
-        // Уже в нужном состоянии
-        return true;
-      }
-    }
-  } catch (e) {
-    console.warn('Ошибка при поиске кнопки лайка в DOM:', e);
-  }
-  return false;
-}
-
 // Получение токена авторизации Boosty из localStorage
 function getBoostyAuthToken() {
   try {
@@ -1176,7 +1128,6 @@ export {
   triggerAutoWebDavSync,
   performWebDavSync,
   saveWebDavSettingsFromForm,
-  syncDomLike,
   getBoostyAuthToken,
   syncBlogDescription,
   performIncrementalSync,
