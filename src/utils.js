@@ -115,6 +115,28 @@ function formatSyncDate(timestamp) {
   });
 }
 
+// Бинарные данные <-> base64 для передачи тела WebDAV через chrome.runtime.sendMessage
+// (сообщения сериализуются как JSON, ArrayBuffer не переживает пересылку). Base64-строка
+// в разы компактнее массива байт-чисел по памяти и скорости сериализации. Кодируем
+// чанками, чтобы не переполнить стек на String.fromCharCode при больших архивах.
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+function base64ToArrayBuffer(base64) {
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
 export {
   BLOG_SLUG,
   STORAGE_KEY,
@@ -131,5 +153,7 @@ export {
   formatDate,
   arePostsEqual,
   formatSeconds,
-  formatSyncDate
+  formatSyncDate,
+  arrayBufferToBase64,
+  base64ToArrayBuffer
 };

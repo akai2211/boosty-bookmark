@@ -32,6 +32,26 @@ global.sessionStorage = sessionStorageMock;
 // Импортируем тестируемый модуль (ESM). Динамический импорт — чтобы моки chrome/sessionStorage
 // были установлены до выполнения init() при загрузке модуля.
 const content = await import('../src/content.js');
+const utils = await import('../src/utils.js');
+
+describe('base64 <-> ArrayBuffer (передача тела WebDAV)', () => {
+  it('round-trip сохраняет байты без потерь', () => {
+    const src = new Uint8Array([0, 1, 2, 127, 128, 200, 255, 80, 75, 3, 4]); // в т.ч. PK-сигнатура zip
+    const b64 = utils.arrayBufferToBase64(src.buffer);
+    expect(typeof b64).toBe('string');
+    const back = new Uint8Array(utils.base64ToArrayBuffer(b64));
+    expect(Array.from(back)).toEqual(Array.from(src));
+  });
+
+  it('round-trip на большом буфере (чанковое кодирование)', () => {
+    const big = new Uint8Array(200000);
+    for (let i = 0; i < big.length; i++) big[i] = i % 256;
+    const back = new Uint8Array(utils.base64ToArrayBuffer(utils.arrayBufferToBase64(big.buffer)));
+    expect(back.length).toBe(big.length);
+    expect(back[0]).toBe(0);
+    expect(back[199999]).toBe(199999 % 256);
+  });
+});
 
 describe('Юнит-тесты расширения Boosty Bookmark', () => {
   beforeEach(() => {

@@ -186,6 +186,9 @@ async function parseBackupZip(arrayBuffer) {
         collapsedGroups: importedData.collapsedGroups || {},
         blogDescriptionLinks: importedData.blogDescriptionLinks || [],
         playerTimestamps: importedData.playerTimestamps || {},
+        newTitles: importedData.newTitles || [],
+        newChapters: importedData.newChapters || [],
+        newListsUpdatedAt: importedData.newListsUpdatedAt || 0,
         settings: importedData.settings || {},
         version: importedData.version,
         exportDate: importedData.exportDate
@@ -213,6 +216,9 @@ async function buildBackupZipBuffer(channelsMap) {
       collapsedGroups: channelData.collapsedGroups || {},
       blogDescriptionLinks: channelData.blogDescriptionLinks || [],
       playerTimestamps: channelData.playerTimestamps || {},
+      newTitles: channelData.newTitles || [],
+      newChapters: channelData.newChapters || [],
+      newListsUpdatedAt: channelData.newListsUpdatedAt || 0,
       settings: channelData.settings || {}
     };
 
@@ -409,18 +415,36 @@ async function performWebDavSync(options = {}) {
     const provider = await prepareWebDavConnection();
 
     const localChannels = await collectLocalChannelsMap();
-    const remoteBuffer = await provider.download();
 
-    let remoteChannels = {};
-    if (remoteBuffer) {
-      remoteChannels = await parseBackupZip(remoteBuffer);
+    // Цикл download → merge → условный upload (If-Match по ETag). Если облако успели
+    // изменить между нашим чтением и записью (412), перечитываем и сливаем заново —
+    // защита от потери чужих правок при одновременной синхронизации с двух устройств.
+    const MAX_CONFLICT_RETRIES = 3;
+    let mergedChannels = null;
+    for (let attempt = 1; ; attempt++) {
+      const { buffer: remoteBuffer, etag } = await provider.download();
+
+      let remoteChannels = {};
+      if (remoteBuffer) {
+        remoteChannels = await parseBackupZip(remoteBuffer);
+      }
+
+      mergedChannels = syncApi.mergeChannelsMaps(localChannels, remoteChannels);
+      const zipBuffer = await buildBackupZipBuffer(mergedChannels);
+
+      try {
+        await provider.upload(zipBuffer, { etag });
+        break;
+      } catch (e) {
+        if (e && e.preconditionFailed && attempt < MAX_CONFLICT_RETRIES) {
+          continue; // облако изменилось — повторяем слияние с новым содержимым
+        }
+        throw e;
+      }
     }
 
-    const mergedChannels = syncApi.mergeChannelsMaps(localChannels, remoteChannels);
-
+    // В локальное хранилище и state записываем только после успешной выгрузки
     await applyMergedChannelsToStorage(mergedChannels);
-    const zipBuffer = await buildBackupZipBuffer(mergedChannels);
-    await provider.upload(zipBuffer);
 
     webdavConfig.lastSyncAt = Date.now();
     webdavConfig.lastSyncStatus = silent ? t('status_webdav_auto_sync_success') : t('status_webdav_sync_success');

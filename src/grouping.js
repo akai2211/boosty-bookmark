@@ -3,6 +3,7 @@
 
 import { TAGS_BLACKLIST } from './utils.js';
 import { state, saveStateToStorage } from './state.js';
+import { mergeReadState } from './webdav-sync.js';
 
 // Группировка постов по тайтлам (тегам)
 function getGroupedTitles() {
@@ -83,19 +84,22 @@ function getGroupedTitlesInternal(posts) {
           
           const oldTime = oldData.updatedAt || 0;
           const newTime = newData.updatedAt || 0;
-          
-          const mergedReadPosts = [...new Set([...(oldData.readPosts || []), ...(newData.readPosts || [])])];
+
+          const { readPosts: mergedReadPosts, readMarks, unreadMarks } = mergeReadState(oldData, newData);
           const mergedStatus = newTime >= oldTime ? newData.status : oldData.status;
           const mergedNotes = newTime >= oldTime ? (newData.notes || '') : (oldData.notes || '');
           const mergedUpdatedAt = Math.max(oldTime, newTime);
-          
-          state.user_data[titleName] = {
+
+          const mergedEntry = {
             status: mergedStatus,
             notes: mergedNotes,
             readPosts: mergedReadPosts,
             updatedAt: mergedUpdatedAt
           };
-          
+          if (Object.keys(readMarks).length) mergedEntry.readMarks = readMarks;
+          if (Object.keys(unreadMarks).length) mergedEntry.unreadMarks = unreadMarks;
+          state.user_data[titleName] = mergedEntry;
+
           delete state.user_data[defaultName];
           hasMigration = true;
         }

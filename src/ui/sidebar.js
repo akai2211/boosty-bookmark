@@ -17,9 +17,10 @@ import {
   state,
   webdavConfig,
   ensureUserData,
+  setPostReadState,
   saveStateToStorage,
   exportUserData,
-  importUserData,
+  importBackupFile,
   saveWebDavConfig
 } from '../state.js';
 import {
@@ -51,6 +52,44 @@ let applyDevSettingsEffects = () => {};
 let devSettings = { enabled: false, cutoffDate: '', hideAboutAuthor: true, alwaysShowReactions: true };
 
 let _headerResizeObserver = null;
+
+// Диалог выбора режима импорта: возвращает 'merge' | 'replace' | null (отмена).
+function showImportChoiceDialog() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'lf-import-dialog-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;';
+
+    overlay.innerHTML = `
+      <div class="lf-import-dialog" style="background:#1e1e22;color:#eee;border:1px solid #3a3a42;border-radius:10px;max-width:340px;width:90%;padding:18px 18px 14px;box-shadow:0 10px 40px rgba(0,0,0,.5);font-size:13px;">
+        <h3 style="margin:0 0 6px;font-size:15px;">${t('import_dialog_title')}</h3>
+        <p style="margin:0 0 14px;color:#aaa;">${t('import_dialog_text')}</p>
+        <button data-mode="merge" class="lf-btn-secondary" style="width:100%;margin:0 0 8px;padding:8px 10px;text-align:left;line-height:1.3;">
+          <strong>${t('import_dialog_merge_btn')}</strong><br><span style="color:#9a9aa2;font-size:11px;">${t('import_dialog_merge_hint')}</span>
+        </button>
+        <button data-mode="replace" class="lf-btn-secondary" style="width:100%;margin:0 0 12px;padding:8px 10px;text-align:left;line-height:1.3;">
+          <strong>${t('import_dialog_replace_btn')}</strong><br><span style="color:#9a9aa2;font-size:11px;">${t('import_dialog_replace_hint')}</span>
+        </button>
+        <button data-mode="" class="lf-btn-secondary" style="width:100%;margin:0;padding:6px 10px;opacity:.8;">${t('import_dialog_cancel_btn')}</button>
+      </div>
+    `;
+
+    const finish = (mode) => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+      resolve(mode || null);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') finish(null); };
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) { finish(null); return; }
+      const btn = e.target.closest('button[data-mode]');
+      if (btn) finish(btn.getAttribute('data-mode'));
+    });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
+  });
+}
 
 function updateHeaderTop() {
   const topMenu = document.getElementById('TopMenu');
@@ -474,6 +513,7 @@ function setSidebarDeps(d) {
                 <input type="url" id="lf-webdav-base-url" class="lf-settings-input" style="padding-right: 28px;" value="${escapeHtml(webdavConfig.baseUrl)}" placeholder="https://cloud.example.com/remote.php/dav/files/user/" autocomplete="off">
                 ${webdavConfig.baseUrl ? `<button class="lf-input-clear-btn" data-clear="lf-webdav-base-url" type="button">&times;</button>` : ''}
               </div>
+              <div class="lf-settings-hint" style="font-size:10px;color:#8a8a92;margin:2px 0 0;">${t('settings_webdav_url_hint')}</div>
               ` : ''}
 
               <label class="lf-settings-label" for="lf-webdav-username" style="margin-top: 8px;">${t('settings_webdav_username')}</label>
@@ -685,7 +725,14 @@ function setSidebarDeps(d) {
     const importBtn = document.getElementById('lf-import-btn');
     const importInput = document.getElementById('lf-import-input');
     importBtn.addEventListener('click', () => importInput.click());
-    importInput.addEventListener('change', importUserData);
+    importInput.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      event.target.value = ''; // сбрасываем сразу, чтобы повторный выбор того же файла сработал
+      if (!file) return;
+      const mode = await showImportChoiceDialog();
+      if (!mode) return; // отмена
+      await importBackupFile(file, mode);
+    });
 
     const webdavEnabled = document.getElementById('lf-webdav-enabled');
     const webdavBaseUrl = document.getElementById('lf-webdav-base-url');
@@ -1716,20 +1763,9 @@ function setSidebarDeps(d) {
             }
           }
           
-          const userData = ensureUserData(manga.name);
-          const readPosts = userData.readPosts || [];
-          
-          if (e.target.checked) {
-            if (!readPosts.includes(postId)) readPosts.push(postId);
-          } else {
-            const index = readPosts.indexOf(postId);
-            if (index > -1) readPosts.splice(index, 1);
-          }
-          
-          userData.readPosts = readPosts;
-          userData.updatedAt = Date.now();
+          setPostReadState(manga.name, postId, e.target.checked);
           saveStateToStorage();
-          
+
           if (e.target.checked) {
             sendBoostyReaction(postId);
             window.postMessage({ type: 'LF_TOGGLE_LIKE_DOM', postId, isLiked: true }, '*');
@@ -2118,20 +2154,9 @@ function setSidebarDeps(d) {
           }
         }
         
-        const userData = ensureUserData(manga.name);
-        const readPosts = userData.readPosts || [];
-        
-        if (e.target.checked) {
-          if (!readPosts.includes(postId)) readPosts.push(postId);
-        } else {
-          const index = readPosts.indexOf(postId);
-          if (index > -1) readPosts.splice(index, 1);
-        }
-        
-        userData.readPosts = readPosts;
-        userData.updatedAt = Date.now();
+        setPostReadState(manga.name, postId, e.target.checked);
         saveStateToStorage();
-        
+
         // Отправляем прямой запрос на обновление лайка на сервере Boosty
         if (e.target.checked) {
           sendBoostyReaction(postId);

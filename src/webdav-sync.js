@@ -4,6 +4,7 @@
  * Формат файла в облаке — ZIP-архив, идентичный ручному экспорту ({slug}/progress.json).
  */
 import { t } from './locales.js';
+import { arrayBufferToBase64, base64ToArrayBuffer } from './utils.js';
 
   const BACKUP_VERSION = '2.0';
   const SYNC_FILE_NAME = 'boosty_bookmark_sync.zip';
@@ -31,12 +32,61 @@ import { t } from './locales.js';
     return path ? `${base}/${path}` : base;
   }
 
-  function parseExportDate(entry) {
-    if (entry?.exportDate) {
-      const ts = Date.parse(entry.exportDate);
-      if (!Number.isNaN(ts)) return ts;
+  // Время отметки «прочитано» для поста id в записи тайтла.
+  // Явная метка readMarks[id] приоритетна; для legacy-данных (только readPosts,
+  // без меток) считаем, что пост прочитан со времени updatedAt записи.
+  function readTsForId(entry, id) {
+    if (entry.readMarks && entry.readMarks[id] != null) return Number(entry.readMarks[id]) || 0;
+    const inList = (entry.readPosts || []).some((p) => String(p) === id);
+    // Legacy-прочтение (только readPosts, без меток) считаем прочитанным со времени
+    // updatedAt; базовое значение 1 — чтобы оно «победило» при отсутствии tombstone,
+    // но проиграло любому реальному снятию отметки (ts = Date.now()).
+    return inList ? (Number(entry.updatedAt) || 1) : 0;
+  }
+
+  function unreadTsForId(entry, id) {
+    if (entry.unreadMarks && entry.unreadMarks[id] != null) return Number(entry.unreadMarks[id]) || 0;
+    return 0;
+  }
+
+  // Слияние состояния «прочитано» по тайтлу с tombstone-логикой (LWW per-post).
+  // Каждый пост имеет время отметки прочитанным и время снятия (tombstone);
+  // итог — то событие, что произошло позже. Это позволяет синхронизировать
+  // СНЯТИЕ отметки между устройствами (чистый union этого не умел).
+  function mergeReadState(l, r) {
+    const left = l || {};
+    const right = r || {};
+    const ids = new Set([
+      ...((left.readPosts || []).map(String)),
+      ...((right.readPosts || []).map(String)),
+      ...Object.keys(left.readMarks || {}),
+      ...Object.keys(right.readMarks || {}),
+      ...Object.keys(left.unreadMarks || {}),
+      ...Object.keys(right.unreadMarks || {})
+    ]);
+
+    const readPosts = [];
+    const readMarks = {};
+    const unreadMarks = {};
+
+    for (const id of ids) {
+      const readTs = Math.max(readTsForId(left, id), readTsForId(right, id));
+      const unreadTs = Math.max(unreadTsForId(left, id), unreadTsForId(right, id));
+
+      // Явную метку прочтения храним, только если она была хотя бы с одной стороны
+      // (legacy-прочтения остаются представлены массивом readPosts — без раздувания).
+      const hasExplicitRead = (left.readMarks && left.readMarks[id] != null) ||
+                              (right.readMarks && right.readMarks[id] != null);
+
+      if (unreadTs > 0) unreadMarks[id] = unreadTs;
+
+      if (readTs > unreadTs && readTs > 0) {
+        readPosts.push(id);
+        if (hasExplicitRead) readMarks[id] = readTs;
+      }
     }
-    return entry?.updatedAt || 0;
+
+    return { readPosts, readMarks, unreadMarks };
   }
 
   function mergeUserData(local, remote) {
@@ -53,14 +103,18 @@ import { t } from './locales.js';
       const lTime = l.updatedAt || 0;
       const rTime = r.updatedAt || 0;
 
-      const readPosts = [...new Set([...(l.readPosts || []), ...(r.readPosts || [])])];
-      
+      const { readPosts, readMarks, unreadMarks } = mergeReadState(l, r);
+
       // Выбираем статус и заметки по таймстампу изменения
       const status = lTime >= rTime ? l.status : r.status;
       const notes = lTime >= rTime ? (l.notes || '') : (r.notes || '');
       const updatedAt = Math.max(lTime, rTime);
 
-      result[title] = { status, notes, readPosts, updatedAt };
+      const entry = { status, notes, readPosts, updatedAt };
+      if (Object.keys(readMarks).length) entry.readMarks = readMarks;
+      if (Object.keys(unreadMarks).length) entry.unreadMarks = unreadMarks;
+
+      result[title] = entry;
     }
 
     return result;
@@ -130,9 +184,19 @@ import { t } from './locales.js';
       };
     }
 
-    const localTs = parseExportDate(local);
-    const remoteTs = parseExportDate(remote);
-    const settings = remoteTs > localTs ? remote.settings : local.settings;
+    // Настройки сливаем по собственному таймстампу settings.updatedAt (LWW),
+    // а не по channel-level exportDate: exportDate генерируется заново при каждом
+    // экспорте, поэтому он не отражает, на какой стороне настройки реально менялись.
+    const localSettingsTs = Number(local.settings?.updatedAt || 0);
+    const remoteSettingsTs = Number(remote.settings?.updatedAt || 0);
+    const settings = remoteSettingsTs > localSettingsTs ? remote.settings : local.settings;
+
+    // Списки «Новое» сливаем целиком по newListsUpdatedAt (LWW): это пропагандирует
+    // и появление новинок, и их очистку. Per-item tombstone здесь избыточен —
+    // новинки эфемерны и пересчитываются при каждой синхронизации постов.
+    const localNewTs = Number(local.newListsUpdatedAt || 0);
+    const remoteNewTs = Number(remote.newListsUpdatedAt || 0);
+    const newSource = remoteNewTs > localNewTs ? remote : local;
 
     return {
       version: BACKUP_VERSION,
@@ -144,8 +208,9 @@ import { t } from './locales.js';
       lastVisit: Math.max(local.lastVisit || 0, remote.lastVisit || 0),
       collapsedGroups: { ...(local.collapsedGroups || {}), ...(remote.collapsedGroups || {}) },
       blogDescriptionLinks: mergeBlogDescriptionLinks(local.blogDescriptionLinks, remote.blogDescriptionLinks),
-      newTitles: [...new Set([...(local.newTitles || []), ...(remote.newTitles || [])])],
-      newChapters: [...new Set([...(local.newChapters || []), ...(remote.newChapters || [])])]
+      newTitles: [...(newSource.newTitles || [])],
+      newChapters: [...(newSource.newChapters || [])],
+      newListsUpdatedAt: Math.max(localNewTs, remoteNewTs)
     };
   }
 
@@ -265,6 +330,8 @@ import { t } from './locales.js';
       });
     }
 
+    // Возвращает { buffer, etag }. buffer === null, если файла ещё нет (404).
+    // etag нужен для условной записи (If-Match) — защита от перезаписи чужих правок.
     async download() {
       const isExtension = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
       if (!isExtension) {
@@ -276,12 +343,12 @@ import { t } from './locales.js';
           throw new Error(t('error_webdav_auth'));
         }
         if (response.status === 404) {
-          return null;
+          return { buffer: null, etag: null };
         }
         if (!response.ok) {
           throw new Error(t('error_webdav_download', response.status));
         }
-        return response.arrayBuffer();
+        return { buffer: await response.arrayBuffer(), etag: response.headers.get('etag') || null };
       }
 
       return new Promise((resolve, reject) => {
@@ -301,31 +368,45 @@ import { t } from './locales.js';
             return reject(new Error(t('error_webdav_auth')));
           }
           if (response.status === 404) {
-            return resolve(null);
+            return resolve({ buffer: null, etag: null });
           }
           if (!response.ok) {
             return reject(new Error(t('error_webdav_download', response.status)));
           }
-          const buffer = new Uint8Array(response.bodyArray).buffer;
-          resolve(buffer);
+          const buffer = response.bodyBase64 ? base64ToArrayBuffer(response.bodyBase64) : new ArrayBuffer(0);
+          resolve({ buffer, etag: response.etag || null });
         });
       });
     }
 
-    async upload(arrayBuffer) {
+    // options.etag — если задан, запись условная (If-Match): сервер отклонит её (412),
+    // если файл в облаке изменился с момента нашего download. На 412 бросаем ошибку
+    // с флагом preconditionFailed, чтобы вызывающий перечитал и слил заново.
+    // Если etag нет (сервер его не отдаёт / файла не было) — пишем безусловно (как раньше),
+    // чтобы не сломать серверы без поддержки ETag.
+    async upload(arrayBuffer, options = {}) {
+      const etag = options.etag || null;
+      const headers = {
+        Authorization: this.authHeader,
+        'Content-Type': 'application/zip'
+      };
+      if (etag) headers['If-Match'] = etag;
+
       const isExtension = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
       if (!isExtension) {
         await this.ensureFolder();
         const response = await fetch(this.fileUrl, {
           method: 'PUT',
-          headers: {
-            Authorization: this.authHeader,
-            'Content-Type': 'application/zip'
-          },
+          headers,
           body: arrayBuffer
         });
         if (response.status === 401 || response.status === 403) {
           throw new Error(t('error_webdav_auth'));
+        }
+        if (response.status === 412) {
+          const err = new Error(t('error_webdav_conflict'));
+          err.preconditionFailed = true;
+          throw err;
         }
         if (!response.ok) {
           throw new Error(t('error_webdav_upload', response.status));
@@ -334,18 +415,15 @@ import { t } from './locales.js';
       }
 
       await this.ensureFolder();
-      const bodyArray = Array.from(new Uint8Array(arrayBuffer));
+      const bodyBase64 = arrayBufferToBase64(arrayBuffer);
 
       return new Promise((resolve, reject) => {
         chrome.runtime.sendMessage({
           type: 'WEBDAV_REQUEST',
           url: this.fileUrl,
           method: 'PUT',
-          headers: {
-            Authorization: this.authHeader,
-            'Content-Type': 'application/zip'
-          },
-          bodyArray: bodyArray
+          headers,
+          bodyBase64: bodyBase64
         }, (response) => {
           if (chrome.runtime.lastError) {
             return reject(new Error(chrome.runtime.lastError.message));
@@ -355,6 +433,11 @@ import { t } from './locales.js';
           }
           if (response.status === 401 || response.status === 403) {
             return reject(new Error(t('error_webdav_auth')));
+          }
+          if (response.status === 412) {
+            const err = new Error(t('error_webdav_conflict'));
+            err.preconditionFailed = true;
+            return reject(err);
           }
           if (!response.ok) {
             return reject(new Error(t('error_webdav_upload', response.status)));
@@ -372,6 +455,7 @@ import { t } from './locales.js';
     WebDavProvider,
     basicAuthHeader,
     mergeUserData,
+    mergeReadState,
     mergePlayerTimestamps,
     mergePosts,
     mergeChannelBackupData,

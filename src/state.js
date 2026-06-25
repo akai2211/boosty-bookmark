@@ -2,6 +2,7 @@
 
 import { t } from './locales.js';
 import { BLOG_SLUG, STORAGE_KEY, WEBDAV_CONFIG_KEY, isExtensionContextValid } from './utils.js';
+import { mergeChannelBackupData } from './webdav-sync.js';
 
 // Внешние зависимости (рендер UI, уведомления, синхронизация), внедряются из content.js
 // через setStateDeps() — разрывает цикл state ↔ sidebar/sync.
@@ -26,6 +27,7 @@ let state = {
   playerTimestamps: {}, // Сохраненные таймстампы плееров { [id]: timeInSeconds }
   newTitles: [],      // Имена новых тайтлов
   newChapters: [],     // Имена тайтлов с новыми главами
+  newListsUpdatedAt: 0, // Таймстамп последнего изменения списков «Новое» (для LWW-слияния с WebDAV)
   settings: {
     syncLikes: true,   // Учитывать лайки как просмотренное
     syncTitleFromUrl: true, // Автоматический переход к тайтлу при выборе тега на Boosty
@@ -79,6 +81,33 @@ function ensureUserData(titleName) {
   return state.user_data[titleName];
 }
 
+// Отметить/снять пост как прочитанный с tombstone-метками времени.
+// readMarks[id]=ts — время отметки прочтения; unreadMarks[id]=ts — время снятия.
+// Метки нужны для синхронизации СНЯТИЯ отметки между устройствами (см. mergeReadState).
+function setPostReadState(titleName, postId, isRead) {
+  const ud = ensureUserData(titleName);
+  const id = String(postId);
+  const now = Date.now();
+  if (!ud.readMarks) ud.readMarks = {};
+  if (!ud.unreadMarks) ud.unreadMarks = {};
+  const list = ud.readPosts || [];
+  const idx = list.findIndex((p) => String(p) === id);
+
+  if (isRead) {
+    if (idx === -1) list.push(id);
+    ud.readMarks[id] = now;
+    delete ud.unreadMarks[id];
+  } else {
+    if (idx > -1) list.splice(idx, 1);
+    ud.unreadMarks[id] = now;
+    delete ud.readMarks[id];
+  }
+
+  ud.readPosts = list;
+  ud.updatedAt = now;
+  return ud;
+}
+
 function updateExtensionBadge() {
   if (!isExtensionContextValid()) return;
   try {
@@ -109,6 +138,7 @@ function loadStateFromStorage() {
         state.playerTimestamps = saved.playerTimestamps || {};
         state.newTitles = saved.newTitles || [];
         state.newChapters = saved.newChapters || [];
+        state.newListsUpdatedAt = saved.newListsUpdatedAt || 0;
         if (saved.settings) {
           state.settings = { ...state.settings, ...saved.settings };
           // Миграция openTagsInCurrentTab -> openTitlesInCurrentTab
@@ -168,6 +198,10 @@ function loadStateFromStorage() {
           state.settings.zoom = 1.25;
           state.settings.zoomMigrated = true;
         }
+        // Базовый снимок настроек/новинок после загрузки/миграций — чтобы первое же
+        // изменение в сессии корректно бампило соответствующий таймстамп.
+        lastSettingsSnapshot = settingsFingerprint(state.settings);
+        lastNewListsSnapshot = newListsFingerprint(state);
         updateExtensionBadge();
         resolve();
       });
@@ -176,6 +210,23 @@ function loadStateFromStorage() {
     }
   });
 }
+
+// Отпечаток настроек для определения их реального изменения (без эфемерных полей).
+// settings.updatedAt должен бампиться только при смене пользовательских настроек,
+// а не на каждом сохранении прогресса — иначе LWW-слияние настроек с WebDAV ломается
+// (на той стороне настройки всегда выглядели бы «свежее»).
+function settingsFingerprint(s) {
+  const { updatedAt, sidebarOpen, ...rest } = s || {};
+  return JSON.stringify(rest);
+}
+let lastSettingsSnapshot = null;
+
+// Аналогично для списков «Новое»: newListsUpdatedAt бампится только при их реальном
+// изменении, чтобы LWW-слияние с WebDAV пропагандировало в т.ч. очистку новинок.
+function newListsFingerprint(s) {
+  return JSON.stringify([s.newTitles || [], s.newChapters || []]);
+}
+let lastNewListsSnapshot = null;
 
 let webdavUploadTimeout;
 function debouncedWebDavUpload() {
@@ -194,6 +245,20 @@ function saveStateToStorage() {
   return new Promise((resolve) => {
     if (!isExtensionContextValid()) { resolve(); return; }
     try {
+      // Бампим settings.updatedAt только если пользовательские настройки реально изменились
+      const fp = settingsFingerprint(state.settings);
+      if (lastSettingsSnapshot !== null && fp !== lastSettingsSnapshot) {
+        state.settings.updatedAt = Date.now();
+      }
+      lastSettingsSnapshot = fp;
+
+      // Бампим newListsUpdatedAt только при реальном изменении списков «Новое»
+      const nlFp = newListsFingerprint(state);
+      if (lastNewListsSnapshot !== null && nlFp !== lastNewListsSnapshot) {
+        state.newListsUpdatedAt = Date.now();
+      }
+      lastNewListsSnapshot = nlFp;
+
       const data = {
         posts: state.posts,
         user_data: state.user_data,
@@ -203,6 +268,7 @@ function saveStateToStorage() {
         playerTimestamps: state.playerTimestamps,
         newTitles: state.newTitles,
         newChapters: state.newChapters,
+        newListsUpdatedAt: state.newListsUpdatedAt || 0,
         settings: state.settings
       };
       const update = {};
@@ -248,6 +314,7 @@ function exportUserData() {
               playerTimestamps: state.playerTimestamps,
               newTitles: state.newTitles,
               newChapters: state.newChapters,
+              newListsUpdatedAt: state.newListsUpdatedAt || 0,
               settings: state.settings
             };
           } else {
@@ -279,6 +346,7 @@ function exportUserData() {
           playerTimestamps: state.playerTimestamps,
           newTitles: state.newTitles,
           newChapters: state.newChapters,
+          newListsUpdatedAt: state.newListsUpdatedAt || 0,
           settings: state.settings
         };
         const jsonString = JSON.stringify(currentChannelData, null, 2);
@@ -313,91 +381,96 @@ function exportUserData() {
   }
 }
 
-// Импорт прогресса пользователя из файла ZIP
-function importUserData(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = async function (e) {
-    try {
-      const arrayBuffer = e.target.result;
-      // Загружаем ZIP с помощью библиотеки JSZip (которая внедрена через manifest)
-      const zip = await JSZip.loadAsync(arrayBuffer);
-
-      const storageUpdates = {};
-      let importedChannelsCount = 0;
-
-      // Обходим все файлы в ZIP-архиве
-      for (const [relativePath, fileEntry] of Object.entries(zip.files)) {
-        if (fileEntry.dir) continue;
-
-        // Ищем структуру вида: "имя_канала/progress.json"
-        const pathParts = relativePath.split('/');
-        if (pathParts.length === 2 && pathParts[1] === 'progress.json') {
-          const slug = pathParts[0];
-          const contentText = await fileEntry.async('text');
-          const importedData = JSON.parse(contentText);
-
-          // Валидируем структуру импортированных данных (хотя бы user_data)
-          if (importedData && typeof importedData === 'object' && importedData.user_data) {
-            const channelState = {
-              posts: importedData.posts || [],
-              user_data: importedData.user_data,
-              lastVisit: importedData.lastVisit || 0,
-              collapsedGroups: importedData.collapsedGroups || {},
-              blogDescriptionLinks: importedData.blogDescriptionLinks || [],
-              playerTimestamps: importedData.playerTimestamps || {},
-              newTitles: importedData.newTitles || [],
-              newChapters: importedData.newChapters || [],
-              settings: importedData.settings || {}
-            };
-            storageUpdates[`lf_state_${slug}`] = channelState;
-            importedChannelsCount++;
-          }
-        }
-      }
-
-      if (importedChannelsCount === 0) {
-        throw new Error('В архиве не найдено корректных файлов progress.json');
-      }
-
-      // Сохраняем все распакованные каналы в хранилище
-      await new Promise((resolve, reject) => {
-        chrome.storage.local.set(storageUpdates, () => {
-          if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError);
-          } else {
-            resolve();
-          }
-        });
-      });
-
-      // Если в импортированных данных был текущий канал, накатываем его в активный state
-      const currentChannelKey = `lf_state_${BLOG_SLUG}`;
-      if (storageUpdates[currentChannelKey]) {
-        state.posts = storageUpdates[currentChannelKey].posts;
-        state.user_data = storageUpdates[currentChannelKey].user_data;
-        state.lastVisit = storageUpdates[currentChannelKey].lastVisit;
-        state.collapsedGroups = storageUpdates[currentChannelKey].collapsedGroups;
-        state.blogDescriptionLinks = storageUpdates[currentChannelKey].blogDescriptionLinks;
-        state.playerTimestamps = storageUpdates[currentChannelKey].playerTimestamps;
-        state.newTitles = storageUpdates[currentChannelKey].newTitles || [];
-        state.newChapters = storageUpdates[currentChannelKey].newChapters || [];
-        state.settings = { ...state.settings, ...storageUpdates[currentChannelKey].settings };
-      }
-
-      deps.showNotification(t('notify_import_success', importedChannelsCount));
-      deps.render();
-    } catch (err) {
-      console.error('Ошибка при импорте бэкапа:', err);
-      deps.showNotification(t('notify_import_invalid_format'));
-    } finally {
-      event.target.value = '';
-    }
+// Нормализация одного канала из импортируемого progress.json в каноничную форму.
+// Возвращает null, если структура невалидна (нет осмысленного user_data).
+function normalizeImportedChannel(importedData) {
+  if (!importedData || typeof importedData !== 'object') return null;
+  if (!importedData.user_data || typeof importedData.user_data !== 'object') return null;
+  return {
+    posts: Array.isArray(importedData.posts) ? importedData.posts : [],
+    user_data: importedData.user_data,
+    lastVisit: Number(importedData.lastVisit) || 0,
+    collapsedGroups: (importedData.collapsedGroups && typeof importedData.collapsedGroups === 'object') ? importedData.collapsedGroups : {},
+    blogDescriptionLinks: Array.isArray(importedData.blogDescriptionLinks) ? importedData.blogDescriptionLinks : [],
+    playerTimestamps: (importedData.playerTimestamps && typeof importedData.playerTimestamps === 'object') ? importedData.playerTimestamps : {},
+    newTitles: Array.isArray(importedData.newTitles) ? importedData.newTitles : [],
+    newChapters: Array.isArray(importedData.newChapters) ? importedData.newChapters : [],
+    newListsUpdatedAt: Number(importedData.newListsUpdatedAt) || 0,
+    settings: (importedData.settings && typeof importedData.settings === 'object') ? importedData.settings : {},
+    version: importedData.version,
+    exportDate: importedData.exportDate
   };
+}
 
-  reader.readAsArrayBuffer(file);
+// Импорт прогресса из ZIP-файла.
+// mode: 'merge' (по умолчанию) — слияние с текущими данными тем же движком, что и WebDAV
+//       (последнее изменение побеждает, ничего не теряется);
+//       'replace' — каналы из архива полностью перезаписывают текущие.
+async function importBackupFile(file, mode = 'merge') {
+  if (!file) return;
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(arrayBuffer);
+
+    // Разбираем архив в карту каналов { slug: normalizedChannel }
+    const importedMap = {};
+    for (const [relativePath, fileEntry] of Object.entries(zip.files)) {
+      if (fileEntry.dir) continue;
+      const pathParts = relativePath.split('/');
+      if (pathParts.length !== 2 || pathParts[1] !== 'progress.json') continue;
+
+      const slug = pathParts[0];
+      let parsed = null;
+      try {
+        parsed = JSON.parse(await fileEntry.async('text'));
+      } catch (e) {
+        continue; // битый JSON конкретного канала — пропускаем
+      }
+      const channel = normalizeImportedChannel(parsed);
+      if (channel) importedMap[slug] = channel;
+    }
+
+    const slugs = Object.keys(importedMap);
+    if (slugs.length === 0) {
+      throw new Error('В архиве не найдено корректных файлов progress.json');
+    }
+
+    // Текущая локальная карта каналов (для режима слияния)
+    let localMap = {};
+    if (mode === 'merge') {
+      const storageResult = await new Promise((resolve) => {
+        chrome.storage.local.get(null, (result) => resolve(result || {}));
+      });
+      localMap = buildLocalChannelsMapFromStorage(storageResult);
+    }
+
+    const storageUpdates = {};
+    for (const slug of slugs) {
+      const channelData = mode === 'merge'
+        ? mergeChannelBackupData(localMap[slug], importedMap[slug])
+        : importedMap[slug];
+      // applyMergedChannelToState приводит к каноничной форме хранения и,
+      // для текущего канала, накатывает в активный state + сбрасывает снимки.
+      storageUpdates[`lf_state_${slug}`] = applyMergedChannelToState(slug, channelData);
+    }
+
+    await new Promise((resolve, reject) => {
+      chrome.storage.local.set(storageUpdates, () => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    updateExtensionBadge();
+    deps.showNotification(t(mode === 'merge' ? 'notify_import_merged' : 'notify_import_success', slugs.length));
+    deps.render();
+  } catch (err) {
+    console.error('Ошибка при импорте бэкапа:', err);
+    deps.showNotification(t('notify_import_invalid_format'));
+  }
 }
 
 function loadWebDavConfig() {
@@ -465,7 +538,10 @@ function buildLocalChannelsMapFromStorage(storageResult) {
         playerTimestamps: state.playerTimestamps,
         lastVisit: state.lastVisit,
         collapsedGroups: state.collapsedGroups,
-        blogDescriptionLinks: state.blogDescriptionLinks
+        blogDescriptionLinks: state.blogDescriptionLinks,
+        newTitles: state.newTitles,
+        newChapters: state.newChapters,
+        newListsUpdatedAt: state.newListsUpdatedAt || 0
       };
     } else if (value && typeof value === 'object') {
       channelsMap[slug] = value;
@@ -480,7 +556,9 @@ function buildLocalChannelsMapFromStorage(storageResult) {
       playerTimestamps: state.playerTimestamps,
       lastVisit: state.lastVisit,
       collapsedGroups: state.collapsedGroups,
-      blogDescriptionLinks: state.blogDescriptionLinks
+      blogDescriptionLinks: state.blogDescriptionLinks,
+      newTitles: state.newTitles,
+      newChapters: state.newChapters
     };
   }
 
@@ -495,7 +573,10 @@ function applyMergedChannelToState(slug, channelData) {
     playerTimestamps: channelData.playerTimestamps || {},
     lastVisit: channelData.lastVisit || 0,
     collapsedGroups: channelData.collapsedGroups || {},
-    blogDescriptionLinks: channelData.blogDescriptionLinks || []
+    blogDescriptionLinks: channelData.blogDescriptionLinks || [],
+    newTitles: channelData.newTitles || [],
+    newChapters: channelData.newChapters || [],
+    newListsUpdatedAt: channelData.newListsUpdatedAt || 0
   };
 
   if (slug === BLOG_SLUG) {
@@ -506,6 +587,13 @@ function applyMergedChannelToState(slug, channelData) {
     state.lastVisit = mergedChannel.lastVisit;
     state.collapsedGroups = mergedChannel.collapsedGroups;
     state.blogDescriptionLinks = mergedChannel.blogDescriptionLinks;
+    state.newTitles = mergedChannel.newTitles;
+    state.newChapters = mergedChannel.newChapters;
+    state.newListsUpdatedAt = mergedChannel.newListsUpdatedAt;
+    // Настройки/новинки заменены слиянием — обновляем снимки, чтобы следующее
+    // сохранение не приняло это за «локальное изменение» и не сбило таймстампы.
+    lastSettingsSnapshot = settingsFingerprint(state.settings);
+    lastNewListsSnapshot = newListsFingerprint(state);
   }
 
   return mergedChannel;
@@ -516,12 +604,13 @@ export {
   webdavConfig,
   setStateDeps,
   ensureUserData,
+  setPostReadState,
   updateExtensionBadge,
   loadStateFromStorage,
   saveStateToStorage,
   debouncedWebDavUpload,
   exportUserData,
-  importUserData,
+  importBackupFile,
   loadWebDavConfig,
   saveWebDavConfig,
   buildLocalChannelsMapFromStorage,

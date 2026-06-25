@@ -40,7 +40,7 @@
 
 ### Юнит-тесты
 * `tests/unit.test.js` — ESM; `src/content.js` грузится динамическим `await import()` после установки моков `global.chrome`/`sessionStorage`. Покрывают `formatDate`, `arePostsEqual`, `ensureUserData`, группировку `getGroupedTitles` (фильтрация техтегов, «Объявления»).
-* `tests/webdav-sync.test.js` — слияние локального и облачного состояний по `updatedAt` (заметки/статус, Union `readPosts`, max по `playerTimestamps`).
+* `tests/webdav-sync.test.js` — слияние локального и облачного состояний: заметки/статус по `updatedAt`, прочитанные главы — tombstone-логика (`mergeReadState`: `readMarks`/`unreadMarks`, синхронизация снятия отметки), настройки по `settings.updatedAt`, новинки LWW по `newListsUpdatedAt`, max по `playerTimestamps`. Детали слияния — `technical_notes.md` §41.
 
 ### E2E-тесты (`tests/extension.spec.js`)
 Запуск во временном контексте Chrome с загруженным расширением; сеть (HTML-страница Boosty и `api.boosty.to`) мокируется для автономности. **8 сценариев:** инициализация триггера/сайдбара; синхронизация и отображение (вкладка «Все», чекбоксы по `isLiked`); поиск и фильтрация; блокнот (автосохранение по `blur`); смена статусов; очистка новинок с эмуляцией даты в DevTools; сброс данных с двухэтапным подтверждением; модальное окно USDT и QR. Детали сценариев — в самом файле теста.

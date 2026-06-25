@@ -15,6 +15,31 @@ describe('WebDAV sync: слияние данных', () => {
       expect(merged['Тайтл А'].readPosts.sort()).toEqual(['post-1', 'post-2', 'post-3']);
     });
 
+    it('tombstone: снятие отметки на одном устройстве побеждает устаревшее прочтение на другом', () => {
+      // Локально пост снят (unreadMarks свежее), удалённо — всё ещё прочитан (legacy)
+      const local = {
+        'Тайтл': { status: 'watching', notes: '', readPosts: [], updatedAt: 5000, unreadMarks: { 'p1': 5000 } }
+      };
+      const remote = {
+        'Тайтл': { status: 'watching', notes: '', readPosts: ['p1'], updatedAt: 1000 }
+      };
+      const merged = sync.mergeUserData(local, remote);
+      expect(merged['Тайтл'].readPosts).toEqual([]); // снятие пропагандировано
+      expect(merged['Тайтл'].unreadMarks.p1).toBe(5000);
+    });
+
+    it('tombstone: повторная отметка прочитанным новее снятия — пост снова прочитан', () => {
+      const local = {
+        'Тайтл': { status: 'watching', notes: '', readPosts: ['p1'], updatedAt: 9000, readMarks: { 'p1': 9000 } }
+      };
+      const remote = {
+        'Тайтл': { status: 'watching', notes: '', readPosts: [], updatedAt: 5000, unreadMarks: { 'p1': 5000 } }
+      };
+      const merged = sync.mergeUserData(local, remote);
+      expect(merged['Тайтл'].readPosts).toEqual(['p1']);
+      expect(merged['Тайтл'].readMarks.p1).toBe(9000);
+    });
+
     it('выбирает статус и заметки на основе таймстампа updatedAt', () => {
       const local = {
         'Тайтл Б': { status: 'watching', notes: 'Новая короткая заметка', readPosts: [], updatedAt: 200 }
@@ -85,7 +110,7 @@ describe('WebDAV sync: слияние данных', () => {
       const local = {
         lightfoxmanga: {
           exportDate: '2026-01-01T00:00:00.000Z',
-          settings: { syncLikes: true },
+          settings: { syncLikes: true, updatedAt: 1000 },
           user_data: { 'Тайтл': { status: 'watching', notes: '', readPosts: ['a'] } },
           playerTimestamps: {},
           lastVisit: 100,
@@ -93,13 +118,14 @@ describe('WebDAV sync: слияние данных', () => {
           blogDescriptionLinks: [],
           newTitles: ['Тайтл A'],
           newChapters: ['Тайтл B'],
+          newListsUpdatedAt: 1000,
           posts: [{ id: 'p1', title: 'Глава 1', publishTime: 10, isLiked: false }]
         }
       };
       const remote = {
         lightfoxmanga: {
           exportDate: '2026-06-01T00:00:00.000Z',
-          settings: { syncLikes: false, autoMarkOpen: true },
+          settings: { syncLikes: false, autoMarkOpen: true, updatedAt: 2000 },
           user_data: { 'Тайтл': { status: 'none', notes: '', readPosts: ['b'] } },
           playerTimestamps: { 'v1': 30 },
           lastVisit: 200,
@@ -107,6 +133,7 @@ describe('WebDAV sync: слияние данных', () => {
           blogDescriptionLinks: [],
           newTitles: ['Тайтл C', 'Тайтл A'],
           newChapters: ['Тайтл D'],
+          newListsUpdatedAt: 2000,
           posts: [{ id: 'p1', title: 'Глава 1', publishTime: 10, isLiked: true }]
         }
       };
@@ -116,9 +143,32 @@ describe('WebDAV sync: слияние данных', () => {
       expect(merged.lightfoxmanga.user_data['Тайтл'].readPosts.sort()).toEqual(['a', 'b']);
       expect(merged.lightfoxmanga.posts).toHaveLength(1);
       expect(merged.lightfoxmanga.posts[0].isLiked).toBe(true);
+      // Списки «Новое» — LWW: удалённый источник новее (newListsUpdatedAt 2000 > 1000)
       expect(merged.lightfoxmanga.newTitles.sort()).toEqual(['Тайтл A', 'Тайтл C']);
-      expect(merged.lightfoxmanga.newChapters.sort()).toEqual(['Тайтл B', 'Тайтл D']);
+      expect(merged.lightfoxmanga.newChapters.sort()).toEqual(['Тайтл D']);
+      expect(merged.lightfoxmanga.newListsUpdatedAt).toBe(2000);
       expect(merged.lightfoxmanga.version).toBe('2.0');
+    });
+
+    it('настройки выбираются по settings.updatedAt, а не по channel exportDate (Баг 1)', () => {
+      // Локальный экспорт «новее» по exportDate, но настройки там старее (updatedAt меньше) —
+      // должны победить удалённые настройки. И наоборот для второго случая.
+      const base = {
+        user_data: {}, playerTimestamps: {}, lastVisit: 0,
+        collapsedGroups: {}, blogDescriptionLinks: [], newTitles: [], newChapters: [], posts: []
+      };
+
+      const remoteWins = sync.mergeChannelsMaps(
+        { ch: { ...base, exportDate: '2026-06-01T00:00:00.000Z', settings: { autoMarkOpen: false, updatedAt: 1000 } } },
+        { ch: { ...base, exportDate: '2026-01-01T00:00:00.000Z', settings: { autoMarkOpen: true, updatedAt: 2000 } } }
+      );
+      expect(remoteWins.ch.settings.autoMarkOpen).toBe(true);
+
+      const localWins = sync.mergeChannelsMaps(
+        { ch: { ...base, exportDate: '2026-01-01T00:00:00.000Z', settings: { autoMarkOpen: true, updatedAt: 2000 } } },
+        { ch: { ...base, exportDate: '2026-06-01T00:00:00.000Z', settings: { autoMarkOpen: false, updatedAt: 1000 } } }
+      );
+      expect(localWins.ch.settings.autoMarkOpen).toBe(true);
     });
   });
 });
