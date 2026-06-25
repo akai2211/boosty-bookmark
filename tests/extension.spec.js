@@ -296,11 +296,10 @@ test.describe('E2E-тесты расширения Boosty Bookmark', () => {
     // Кнопка очистки должна быть видна
     const clearBtn = page.locator('#lf-clear-all-new-btn');
     await expect(clearBtn).toBeVisible();
-    await expect(clearBtn).toHaveText(/Очистить всё/);
+    await expect(clearBtn).not.toHaveClass(/lf-confirming/);
 
     // Первый клик: кнопка переходит в режим подтверждения
     await clearBtn.click();
-    await expect(clearBtn).toHaveText(/Точно очистить\?/);
     await expect(clearBtn).toHaveClass(/lf-confirming/);
 
     // Второй клик: очистка
@@ -327,14 +326,14 @@ test.describe('E2E-тесты расширения Boosty Bookmark', () => {
     await expect(deleteBtn).toBeVisible();
     await deleteBtn.click();
 
-    // Кнопка должна изменить текст и появиться кнопка "Отмена"
-    await expect(deleteBtn).toHaveText('Вы точно уверены? Нажмите для удаления');
+    // Кнопка должна перейти в режим подтверждения и появиться кнопка "Отмена"
+    await expect(deleteBtn).toHaveAttribute('data-confirming', 'true');
     const cancelBtn = page.locator('#lf-delete-cancel-btn');
     await expect(cancelBtn).toBeVisible();
 
     // Нажимаем отмену и проверяем сброс состояния подтверждения
     await cancelBtn.click();
-    await expect(deleteBtn).toHaveText('Удалить сохранённые данные');
+    await expect(deleteBtn).not.toHaveAttribute('data-confirming', 'true');
     await expect(cancelBtn).not.toBeVisible();
 
     // Нажимаем еще раз и подтверждаем удаление (второй клик по той же кнопке)
