@@ -31,6 +31,7 @@ let lastCheckedChatUrl = null;
   let lastScrolledUrl = null;
   let lastScrolledPostId = null;
   let lastProcessedTagParam = null;
+  let lastProcessedPostIdParam = null;
   // ID активного цикла скролла-к-посту (для остановки при смене главы / cleanup)
   let scrollToPostIntervalId = null;
 
@@ -304,12 +305,18 @@ let lastCheckedChatUrl = null;
     const urlParams = new URLSearchParams(window.location.search);
     const tagParam = urlParams.get('postsTagsIds') || urlParams.get('tag') || null;
 
-    if (tagParam === lastProcessedTagParam) {
+    const postMatch = window.location.pathname.match(/\/posts\/([^/?#]+)/i);
+    const postIdParam = postMatch ? postMatch[1] : null;
+
+    if (tagParam === lastProcessedTagParam && postIdParam === lastProcessedPostIdParam) {
       return;
     }
 
     const previousTagParam = lastProcessedTagParam;
+    const previousPostIdParam = lastProcessedPostIdParam;
+
     lastProcessedTagParam = tagParam;
+    lastProcessedPostIdParam = postIdParam;
 
     if (tagParam) {
       const allTitles = getGroupedTitles();
@@ -337,10 +344,28 @@ let lastCheckedChatUrl = null;
           render();
         }
       }
+    } else if (postIdParam) {
+      const allTitles = getGroupedTitles();
+      const matchedTitle = allTitles.find(t => t.posts && t.posts.some(p => String(p.id) === String(postIdParam)));
+      
+      if (matchedTitle) {
+        if (state.ui.activeTitle !== matchedTitle.name) {
+          console.log(`[Boosty Bookmark] Автоматическое переключение на тайтл: "${matchedTitle.name}" (найден по посту ${postIdParam})`);
+          state.ui.activeTitle = matchedTitle.name;
+          try {
+            sessionStorage.setItem('lf_active_title', matchedTitle.name);
+          } catch (e) {}
+          render();
+        }
+      } else {
+        // Если пост еще не загрузился в базу (например, синхронизация идет в фоне),
+        // сбрасываем сохраненный ID, чтобы при следующем тике мы могли повторить попытку.
+        lastProcessedPostIdParam = null;
+      }
     } else {
-      // tagParam === null, но previousTagParam !== null
-      // Это означает переход с конкретного тега на общую ленту
-      if (previousTagParam !== null && state.ui.activeTitle !== null) {
+      // tagParam === null && postIdParam === null
+      // Переход на общую ленту
+      if ((previousTagParam !== null || previousPostIdParam !== null) && state.ui.activeTitle !== null) {
         console.log(`[Boosty Bookmark] Сброс активного тайтла при переходе на общую ленту`);
         state.ui.activeTitle = null;
         try {
@@ -397,6 +422,7 @@ function resetNavScrollState() {
   lastScrolledUrl = null;
   lastScrolledPostId = null;
   lastProcessedTagParam = null;
+  lastProcessedPostIdParam = null;
   if (scrollToPostIntervalId) {
     clearInterval(scrollToPostIntervalId);
     scrollToPostIntervalId = null;
@@ -406,6 +432,7 @@ function resetNavScrollState() {
 // Сброс только обработанного тег-параметра (вызывается из checkUrlAndToggleVisibility)
 function resetProcessedTagParam() {
   lastProcessedTagParam = null;
+  lastProcessedPostIdParam = null;
 }
 
 export {

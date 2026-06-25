@@ -330,6 +330,7 @@ export {
   analyzeNewContent,
   checkAndTriggerOpenChat,
   syncActiveTitleFromUrl,
+  resetProcessedTagParam,
   getWebDavOrigin,
   requestWebDavPermission,
   BLOG_SLUG,

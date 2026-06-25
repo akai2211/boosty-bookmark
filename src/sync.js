@@ -306,7 +306,11 @@ function getWebDavOrigin() {
     const url = new URL(normalized);
     return `${url.protocol}//${url.host}/*`;
   } catch (e) {
-    console.warn('[BoostyBookmark] Ошибка при разборе URL для прав:', e);
+    if (typeof DEV !== 'undefined' && DEV) {
+      console.warn('[BoostyBookmark] Ошибка при разборе URL для прав:', e);
+    } else {
+      console.log('[BoostyBookmark] Ошибка при разборе URL для прав:', e.message || e);
+    }
     return null;
   }
 }
@@ -458,7 +462,11 @@ async function performWebDavSync(options = {}) {
       showNotification(t('notify_webdav_sync_success'));
     }
   } catch (err) {
-    console.error('WebDAV sync error:', err);
+    if (typeof DEV !== 'undefined' && DEV) {
+      console.error('WebDAV sync error:', err);
+    } else {
+      console.log('WebDAV sync error:', err.message || err);
+    }
     webdavConfig.lastSyncStatus = err.message || t('status_webdav_sync_error');
     await saveWebDavConfig();
     if (!silent) {
@@ -670,7 +678,11 @@ async function syncBlogDescription() {
       state.blogDescriptionLinks = links;
     }
   } catch (e) {
-    console.warn('Не удалось загрузить описание блога:', e);
+    if (typeof DEV !== 'undefined' && DEV) {
+      console.warn('Не удалось загрузить описание блога:', e);
+    } else {
+      console.log('Не удалось загрузить описание блога:', e.message || e);
+    }
   }
 }
 
@@ -781,7 +793,11 @@ async function performIncrementalSync() {
     showNotification(t('notify_sync_success'));
 
   } catch (e) {
-    console.error('Ошибка инкрементальной синхронизации Boosty:', e);
+    if (typeof DEV !== 'undefined' && DEV) {
+      console.error('Ошибка инкрементальной синхронизации Boosty:', e);
+    } else {
+      console.log('Ошибка инкрементальной синхронизации Boosty:', e.message || e);
+    }
     showNotification(t('notify_sync_error'));
   } finally {
     state.ui.isSyncing = false;
@@ -871,7 +887,11 @@ async function performFullSync() {
   } catch (e) {
     // Чекпоинт уже сохранён по последней успешной странице — следующий запуск
     // («Попробуйте ещё раз») продолжит докачку, а не начнёт с нуля.
-    console.error('Ошибка синхронизации Boosty (прогресс сохранён для докачки):', e);
+    if (typeof DEV !== 'undefined' && DEV) {
+      console.error('Ошибка синхронизации Boosty (прогресс сохранён для докачки):', e);
+    } else {
+      console.log('Ошибка синхронизации Boosty (прогресс сохранён для докачки):', e.message || e);
+    }
     showNotification(t('notify_sync_posts_error'));
   } finally {
     state.ui.isSyncing = false;
@@ -944,7 +964,11 @@ async function backgroundSync() {
       render();
     }
   } catch (e) {
-    console.warn('Фоновое обновление не удалось:', e);
+    if (typeof DEV !== 'undefined' && DEV) {
+      console.warn('Фоновое обновление не удалось:', e);
+    } else {
+      console.log('Фоновое обновление не удалось:', e.message || e);
+    }
   }
 }
 
@@ -1067,7 +1091,11 @@ async function sendBoostyReaction(postId) {
     if (post) post.isLiked = true;
     
   } catch (e) {
-    console.warn('Не удалось отправить реакцию на Boosty:', e);
+    if (typeof DEV !== 'undefined' && DEV) {
+      console.warn('Не удалось отправить реакцию на Boosty:', e);
+    } else {
+      console.log('Не удалось отправить реакцию на Boosty:', e.message || e);
+    }
   }
 }
 
@@ -1105,7 +1133,11 @@ async function removeBoostyReaction(postId) {
     if (post) post.isLiked = false;
     
   } catch (e) {
-    console.warn('Не удалось снять реакцию на Boosty:', e);
+    if (typeof DEV !== 'undefined' && DEV) {
+      console.warn('Не удалось снять реакцию на Boosty:', e);
+    } else {
+      console.log('Не удалось снять реакцию на Boosty:', e.message || e);
+    }
   }
 }
 

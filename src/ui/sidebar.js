@@ -1207,7 +1207,11 @@ function setSidebarDeps(d) {
         }
       }
     } catch (e) {
-      console.warn('Failed to get manifest version:', e);
+      if (typeof DEV !== 'undefined' && DEV) {
+        console.warn('Failed to get manifest version:', e);
+      } else {
+        console.log('Failed to get manifest version:', e.message || e);
+      }
     }
 
     container.innerHTML = aboutContentTemplate(version);

@@ -316,6 +316,9 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
 
     beforeEach(() => {
       originalWindow = global.window;
+      // Сброс модульного состояния навигации, чтобы тесты не зависели от порядка
+      // (lastProcessedTagParam / lastProcessedPostIdParam утекают между тестами).
+      content.resetProcessedTagParam();
       content.state.ui = { activeTitle: null };
       content.state.blogDescriptionLinks = [];
       content.state.settings = { syncTitleFromUrl: true };
@@ -401,6 +404,66 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
       // Вызов syncActiveTitleFromUrl не должен вернуть "Реинкарнация", так как tagParam не изменился
       content.syncActiveTitleFromUrl();
       expect(content.state.ui.activeTitle).toBeNull();
+    });
+
+    it('должен переключать activeTitle на название тайтла по ID поста, если этот пост есть в state.posts', () => {
+      content.state.posts = [
+        { id: 'post-123', title: 'Глава 1', publishTime: 100, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: false }
+      ];
+      global.window = {
+        location: {
+          pathname: '/lightfoxmanga/posts/post-123',
+          search: ''
+        }
+      };
+
+      content.syncActiveTitleFromUrl();
+      expect(content.state.ui.activeTitle).toBe('Реинкарнация');
+      expect(sessionStorage.setItem).toHaveBeenCalledWith('lf_active_title', 'Реинкарнация');
+    });
+
+    it('должен сбрасывать activeTitle на null при переходе с конкретного поста на общую ленту', () => {
+      content.state.posts = [
+        { id: 'post-123', title: 'Глава 1', publishTime: 100, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: false }
+      ];
+      global.window = {
+        location: {
+          pathname: '/lightfoxmanga/posts/post-123',
+          search: ''
+        }
+      };
+      
+      content.syncActiveTitleFromUrl(); // Установит activeTitle = 'Реинкарнация' и lastProcessedPostIdParam = 'post-123'
+      expect(content.state.ui.activeTitle).toBe('Реинкарнация');
+
+      // Переходим на общую ленту
+      global.window.location.pathname = '/lightfoxmanga';
+      content.syncActiveTitleFromUrl();
+
+      expect(content.state.ui.activeTitle).toBeNull();
+      expect(sessionStorage.setItem).toHaveBeenCalledWith('lf_active_title', '');
+    });
+
+    it('не должен фиксировать lastProcessedPostIdParam, если пост не найден, чтобы повторить попытку при следующем тике', () => {
+      content.state.posts = []; // Поста еще нет в базе
+      global.window = {
+        location: {
+          pathname: '/lightfoxmanga/posts/post-123',
+          search: ''
+        }
+      };
+
+      content.syncActiveTitleFromUrl();
+      expect(content.state.ui.activeTitle).toBeNull();
+
+      // Теперь пост загрузился в базу
+      content.state.posts = [
+        { id: 'post-123', title: 'Глава 1', publishTime: 100, tags: [{ id: 'tag-1', title: 'Реинкарнация' }], subscriptionLevel: 'free', isLiked: false }
+      ];
+
+      // Должен успешно переключить, так как lastProcessedPostIdParam был сброшен в null
+      content.syncActiveTitleFromUrl();
+      expect(content.state.ui.activeTitle).toBe('Реинкарнация');
     });
   });
 
