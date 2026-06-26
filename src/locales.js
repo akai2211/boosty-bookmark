@@ -35,7 +35,7 @@ const locales = {
       loading_db: 'Загружаем посты...',
       loading_page: 'Страница {0}',
       loading_once_notice: 'Это нужно сделать всего один раз.',
-      empty_db_notice: 'Здесь пока пусто. Нажмите кнопку со стрелками вверху, чтобы загрузить посты.',
+      empty_db_notice: 'Здесь пока пусто. Нажмите «Загрузить», чтобы загрузить посты.',
       empty_db_run_btn: 'Загрузить',
 
       // Настройки: Общие секции
@@ -304,7 +304,7 @@ const locales = {
       loading_db: 'Loading posts...',
       loading_page: 'Page {0}',
       loading_once_notice: 'This only needs to be done once.',
-      empty_db_notice: 'It\'s empty here for now. Click the arrows button at the top to load your posts.',
+      empty_db_notice: 'It\'s empty here for now. Click “Load” to load posts.',
       empty_db_run_btn: 'Load',
 
       // Settings: Main Sections
