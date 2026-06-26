@@ -50,7 +50,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
+          generate_release_notes: false
           files: |
             boosty-bookmark-v*-release.zip
             boosty-bookmark-v*-firefox-release.zip
