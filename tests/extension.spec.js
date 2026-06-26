@@ -92,6 +92,13 @@ test.describe('E2E-тесты расширения Boosty Bookmark', () => {
         })
       });
     });
+
+    // Гасим приветственный поп-ап первой установки: в свежем профиле background
+    // (onInstalled) ставит флаг lf_welcome_pending, и окно перекрывало бы сайдбар,
+    // ломая клики. Сбрасываем флаг в storage расширения до переходов на страницу.
+    let [sw] = context.serviceWorkers();
+    if (!sw) sw = await context.waitForEvent('serviceworker');
+    await sw.evaluate(() => chrome.storage.local.set({ lf_welcome_pending: false }));
   });
 
   test.afterEach(async () => {

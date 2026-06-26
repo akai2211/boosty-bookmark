@@ -280,11 +280,33 @@ function getStatusTooltip(color) {
   }
 }
 
+// Приветственный поп-ап при первой установке расширения.
+function welcomeModalTemplate() {
+  return `
+            <div class="lf-modal-content">
+              <div class="lf-modal-header">
+                <h3 class="lf-modal-title">${t('welcome_title')}</h3>
+                <button id="lf-welcome-close-btn" class="lf-modal-close">&times;</button>
+              </div>
+              <div class="lf-modal-body">
+                <p class="lf-welcome-text">${t('welcome_body')}</p>
+                <p class="lf-welcome-text">${t('welcome_thanks')}</p>
+                <div class="lf-welcome-actions">
+                  <a href="https://boosty.to/akai2211" target="_blank" rel="noopener" id="lf-welcome-boosty-btn" class="lf-support-btn lf-support-boosty">
+                    <span>${t('welcome_boosty_btn')} →</span>
+                  </a>
+                  <button id="lf-welcome-ok-btn" class="lf-welcome-close-action">${t('welcome_close_btn')}</button>
+                </div>
+              </div>
+            </div>`;
+}
+
 export {
   triggerButtonIcon,
   sidebarLoadingTemplate,
   sidebarShellTemplate,
   usdtModalTemplate,
+  welcomeModalTemplate,
   aboutContentTemplate,
   getStatusTooltip
 };

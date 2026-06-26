@@ -38,6 +38,7 @@ import {
   sidebarLoadingTemplate,
   sidebarShellTemplate,
   usdtModalTemplate,
+  welcomeModalTemplate,
   aboutContentTemplate,
   getStatusTooltip
 } from './templates.js';
@@ -2238,6 +2239,46 @@ function setSidebarDeps(d) {
     render();
   }
 
+  // Приветственный поп-ап при первой установке. Открывает панель (чтобы окно было
+  // видно и затемизировано — переменные тем заданы на #lf-sidebar) и показывает
+  // модалку поверх неё через тот же оверлей, что и у USDT.
+  function showWelcomeModal() {
+    const sidebar = document.getElementById('lf-sidebar');
+    if (!sidebar) return;
+    if (document.getElementById('lf-welcome-modal')) return;
+
+    if (!state.settings.sidebarOpen) {
+      state.settings.sidebarOpen = true;
+      sidebar.classList.add('lf-open');
+      detectAndApplyTheme();
+      saveStateToStorage();
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'lf-welcome-modal';
+    modal.className = 'lf-modal-overlay';
+    modal.innerHTML = welcomeModalTemplate();
+    sidebar.appendChild(modal);
+
+    const closeModal = () => {
+      modal.classList.remove('lf-show');
+      setTimeout(() => modal.remove(), 200);
+    };
+
+    const closeBtn = modal.querySelector('#lf-welcome-close-btn');
+    const okBtn = modal.querySelector('#lf-welcome-ok-btn');
+    const boostyBtn = modal.querySelector('#lf-welcome-boosty-btn');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (okBtn) okBtn.addEventListener('click', closeModal);
+    // «Мой Boosty» — обычная ссылка (откроется в новой вкладке), окно закроем следом.
+    if (boostyBtn) boostyBtn.addEventListener('click', () => setTimeout(closeModal, 100));
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    setTimeout(() => modal.classList.add('lf-show'), 10);
+  }
+
 
 export {
   render,
@@ -2252,6 +2293,7 @@ export {
   createTriggerButton,
   detectAndApplyTheme,
   showNotification,
+  showWelcomeModal,
   debounceSave,
   clearTitleNovelty,
   moveTab,

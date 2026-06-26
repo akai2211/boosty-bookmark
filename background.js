@@ -23,6 +23,14 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
+// Первая установка расширения: ставим флаг, чтобы content-скрипт один раз показал
+// приветственный поп-ап. reason === 'install' отличает чистую установку от обновления.
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === 'install') {
+    chrome.storage.local.set({ lf_welcome_pending: true });
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'RELOAD_EXTENSION') {
     sendResponse({ success: true });

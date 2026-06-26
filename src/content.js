@@ -40,6 +40,7 @@ import {
   createTriggerButton,
   renderListContent,
   renderSettingsContent,
+  showWelcomeModal,
   cleanupHeaderObserver
 } from './ui/sidebar.js';
 import {
@@ -196,6 +197,20 @@ async function checkUrlAndToggleVisibility() {
   }
 }
 
+// Показ приветственного поп-апа при первой установке (флаг ставит background.js
+// в onInstalled). Показываем один раз: сразу снимаем флаг. Если сайдбар ещё не
+// создан (нерелевантная страница) — оставляем флаг до следующего захода.
+async function maybeShowWelcome() {
+  try {
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
+    const { lf_welcome_pending } = await chrome.storage.local.get('lf_welcome_pending');
+    if (!lf_welcome_pending) return;
+    if (!document.getElementById('lf-sidebar')) return;
+    await chrome.storage.local.remove('lf_welcome_pending');
+    showWelcomeModal();
+  } catch (e) {}
+}
+
 // Инициализация расширения
 async function init() {
   let version = '0.9.0';
@@ -277,6 +292,9 @@ async function init() {
 
   // Первичная проверка текущей страницы
   await checkUrlAndToggleVisibility();
+
+  // Приветственный поп-ап при первой установке (один раз)
+  await maybeShowWelcome();
 
   // Слушаем закрытие страницы, чтобы обновить время последнего визита
   eventHandlers.beforeunload = () => {
