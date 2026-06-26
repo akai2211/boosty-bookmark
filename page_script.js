@@ -10,7 +10,7 @@
   // чтобы можно было проверить в DevTools, что загружена свежая версия:
   //   в консоли страницы Boosty набери  __LF_BUILD
   // Должен совпадать со значением в src/utils.js (LF_INTERNAL_BUILD).
-  const LF_INTERNAL_BUILD = '2026-06-27.5';
+  const LF_INTERNAL_BUILD = '2026-06-27.6';
   try { window.__LF_BUILD = LF_INTERNAL_BUILD; } catch (e) {}
 
   const LF_MSG_TYPE = 'LF_REACTION_INTERCEPTED';

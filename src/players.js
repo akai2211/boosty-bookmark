@@ -96,6 +96,48 @@ import { state, saveStateToStorage } from './state.js';
     }
   }
 
+  // Показ/скрытие бейджа «где остановился» для главы по состоянию галочки, без
+  // побочных эффектов. Нужен там, где `checked` меняется ПРОГРАММНО (перехват
+  // лайка) — событие `change` при этом не возникает, и инлайновая логика в
+  // обработчике сайдбара не срабатывает. Отмечено → бейдж скрыт; снято → показан,
+  // если есть сохранённый прогресс (при необходимости создаётся).
+  function applyChapterProgressVisibility(postId, isChecked) {
+    const checkbox = document.querySelector(`.lf-chapter-checkbox[data-post-id="${postId}"]`);
+    if (!checkbox) return;
+    const row = checkbox.closest('.lf-chapter-row');
+    if (!row) return;
+
+    let progressEl = row.querySelector('.lf-chapter-player-progress');
+
+    if (isChecked) {
+      if (progressEl) progressEl.style.display = 'none';
+      return;
+    }
+
+    const prog = getPlayerProgressForPost(String(postId));
+    if (!prog || typeof prog.time !== 'number') {
+      if (progressEl) progressEl.style.display = 'none';
+      return;
+    }
+
+    if (!progressEl) {
+      const container = row.querySelector('.lf-chapter-title-container');
+      if (!container) return;
+      progressEl = document.createElement('span');
+      progressEl.className = 'lf-chapter-player-progress';
+      progressEl.title = t('player_progress_tooltip');
+      const timeStr = formatSeconds(prog.time);
+      const durationStr = (typeof prog.duration === 'number' && prog.duration > 0) ? formatSeconds(prog.duration) : null;
+      const text = durationStr ? t('player_progress_watched', timeStr, durationStr) : t('player_progress_stopped', timeStr);
+      progressEl.innerHTML = `
+        <svg viewBox="0 0 24 24"><path d="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z" /></svg>
+        ${text}
+      `;
+      container.appendChild(progressEl);
+    }
+    progressEl.style.display = '';
+  }
+
   // Получение уникального ключа плеера
   function getPlayerUniqueId(player) {
     if (player.tagName === 'AUDIO') {
@@ -250,6 +292,7 @@ import { state, saveStateToStorage } from './state.js';
 
 export {
   getPlayerProgressForPost,
+  applyChapterProgressVisibility,
   initPlayerTracking,
   sendVideoQualityPref
 };

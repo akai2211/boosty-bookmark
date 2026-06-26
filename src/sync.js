@@ -12,6 +12,7 @@ import {
 } from './state.js';
 import * as BoostyBookmarkSync from './webdav-sync.js';
 import { getGroupedTitles, getGroupedTitlesInternal } from './grouping.js';
+import { applyChapterProgressVisibility } from './players.js';
 
 // Внешние зависимости (UI-рендер, уведомления, dev-настройки, общий объект
 // обработчиков событий), внедряются из content.js через setSyncDeps().
@@ -150,6 +151,11 @@ function handleInterceptedReaction(postId, isLiked) {
       }
     }
   }
+
+  // Галочка менялась программно (change не сработал) — синхронизируем бейдж
+  // «где остановился»: лайк → скрыть, дизлайк → показать (если есть прогресс
+  // и видео не досмотрено).
+  applyChapterProgressVisibility(postIdStr, isLiked);
 }
 
 // -------------------------------------------------------------
