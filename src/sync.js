@@ -1,6 +1,6 @@
 /* sync.js — Синхронизация с API Boosty, перехват лайков и облачная синхронизация (WebDAV). */
 
-import { t } from './locales.js';
+import { t, getCurrentLang } from './locales.js';
 import { BLOG_SLUG, WEBDAV_AUTO_SYNC_MIN_INTERVAL_MS, isExtensionContextValid, arePostsEqual } from './utils.js';
 import {
   state,
@@ -322,18 +322,63 @@ function getWebDavOrigin() {
   }
 }
 
-function requestWebDavPermission(origin) {
+// Проверка наличия host-permission. В контексте страницы расширения / тестов
+// chrome.permissions доступен напрямую; в content-скрипте его нет, поэтому
+// проверку делегируем background (WEBDAV_CHECK_PERMISSION).
+function checkWebDavPermission(origin) {
   return new Promise((resolve) => {
     if (!origin) { resolve(true); return; }
-    if (typeof chrome === 'undefined' || !chrome.permissions) { resolve(true); return; }
-    chrome.permissions.contains({ origins: [origin] }, (hasPermission) => {
-      if (hasPermission) {
-        resolve(true);
-      } else {
-        chrome.permissions.request({ origins: [origin] }, (granted) => {
-          resolve(!!granted);
-        });
-      }
+    if (typeof chrome !== 'undefined' && chrome.permissions) {
+      chrome.permissions.contains({ origins: [origin] }, (has) => resolve(!!has));
+      return;
+    }
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'WEBDAV_CHECK_PERMISSION', origin }, (resp) => {
+        if (chrome.runtime.lastError || !resp) { resolve(false); return; }
+        resolve(!!resp.granted);
+      });
+      return;
+    }
+    resolve(true);
+  });
+}
+
+// Открыть страницу выдачи доступа (permissions.html) через background.
+function openWebDavPermissionPage(origin) {
+  return new Promise((resolve) => {
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+      resolve(false);
+      return;
+    }
+    const lang = getCurrentLang();
+    chrome.runtime.sendMessage({ type: 'OPEN_WEBDAV_PERMISSION_PAGE', origin, lang }, () => resolve(true));
+  });
+}
+
+// Возвращает { granted, pageOpened }. В контексте страницы расширения (chrome.permissions.request
+// доступен) запрашивает право напрямую. В content-скрипте такого API нет: проверяем наличие
+// права через background и, если его нет, открываем страницу выдачи (pageOpened: true).
+function requestWebDavPermission(origin) {
+  return new Promise((resolve) => {
+    if (!origin) { resolve({ granted: true, pageOpened: false }); return; }
+
+    if (typeof chrome !== 'undefined' && chrome.permissions && chrome.permissions.request) {
+      chrome.permissions.contains({ origins: [origin] }, (hasPermission) => {
+        if (hasPermission) {
+          resolve({ granted: true, pageOpened: false });
+        } else {
+          chrome.permissions.request({ origins: [origin] }, (granted) => {
+            resolve({ granted: !!granted, pageOpened: false });
+          });
+        }
+      });
+      return;
+    }
+
+    // content-скрипт: запросить право напрямую нельзя.
+    checkWebDavPermission(origin).then((has) => {
+      if (has) { resolve({ granted: true, pageOpened: false }); return; }
+      openWebDavPermissionPage(origin).then(() => resolve({ granted: false, pageOpened: true }));
     });
   });
 }
@@ -392,22 +437,21 @@ async function performWebDavSync(options = {}) {
   const origin = getWebDavOrigin();
   if (origin) {
     if (silent) {
-      // При автосинке (без User Gesture) просто проверяем наличие прав
-      const hasPerm = await new Promise((resolve) => {
-        if (typeof chrome === 'undefined' || !chrome.permissions) { resolve(true); return; }
-        chrome.permissions.contains({ origins: [origin] }, resolve);
-      });
+      // При автосинке (без User Gesture) просто проверяем наличие прав (через background)
+      const hasPerm = await checkWebDavPermission(origin);
       if (!hasPerm) {
         console.warn('[BoostyBookmark] Автосинк отменен: нет разрешения для хоста', origin);
         return;
       }
     } else {
-      // При ручной синхронизации (клик) запрашиваем права
-      const granted = await requestWebDavPermission(origin);
+      // При ручной синхронизации (клик) запрашиваем права; для произвольного WebDAV
+      // из content-скрипта открывается страница выдачи доступа (pageOpened).
+      const { granted, pageOpened } = await requestWebDavPermission(origin);
       if (!granted) {
-        webdavConfig.lastSyncStatus = t('error_webdav_no_permission');
+        const msg = pageOpened ? t('notify_webdav_permission_page_opened') : t('error_webdav_no_permission');
+        webdavConfig.lastSyncStatus = msg;
         await saveWebDavConfig();
-        showNotification(t('error_webdav_no_permission'));
+        showNotification(msg);
         if (state.ui.activeTab === 'settings') {
           renderSettingsContent();
         }

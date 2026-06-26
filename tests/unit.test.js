@@ -293,10 +293,10 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
     it('должен проверять и запрашивать права через chrome.permissions', async () => {
       const origin = 'https://nextcloud.example.com/*';
       const result = await content.requestWebDavPermission(origin);
-      
+
       expect(global.chrome.permissions.contains).toHaveBeenCalledWith({ origins: [origin] }, expect.any(Function));
       expect(global.chrome.permissions.request).toHaveBeenCalledWith({ origins: [origin] }, expect.any(Function));
-      expect(result).toBe(true);
+      expect(result).toEqual({ granted: true, pageOpened: false });
     });
 
     it('должен возвращать true и не запрашивать, если права уже есть', async () => {
@@ -304,10 +304,10 @@ describe('Юнит-тесты расширения Boosty Bookmark', () => {
       
       const origin = 'https://nextcloud.example.com/*';
       const result = await content.requestWebDavPermission(origin);
-      
+
       expect(global.chrome.permissions.contains).toHaveBeenCalledWith({ origins: [origin] }, expect.any(Function));
       expect(global.chrome.permissions.request).not.toHaveBeenCalled();
-      expect(result).toBe(true);
+      expect(result).toEqual({ granted: true, pageOpened: false });
     });
   });
 

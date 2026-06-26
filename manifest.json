@@ -25,7 +25,8 @@
     "service_worker": "background.js"
   },
   "host_permissions": [
-    "https://boosty.to/*"
+    "https://boosty.to/*",
+    "https://webdav.yandex.ru/*"
   ],
   "optional_host_permissions": [
     "https://*/*",

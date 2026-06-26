@@ -15,7 +15,9 @@ const INCLUDE_PATHS = [
   'background.js',
   'styles.css',
   'jszip.min.js',
-  'page_script.js'
+  'page_script.js',
+  'permissions.html',
+  'permissions.js'
 ];
 
 // Функция рекурсивного удаления директории

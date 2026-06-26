@@ -240,6 +240,7 @@ const locales = {
       error_webdav_no_access_code: 'Укажите код доступа',
       error_webdav_no_background_response: 'Фоновый процесс не ответил',
       error_webdav_no_permission: 'Не получено разрешение на доступ к WebDAV-серверу',
+      notify_webdav_permission_page_opened: 'Открыто окно для выдачи доступа к серверу. Разрешите доступ и повторите синхронизацию.',
 
       empty_search_results: 'Ничего не найдено в этой категории.',
       confirm_clear_all_new_short: 'Точно очистить?',
@@ -503,6 +504,7 @@ const locales = {
       error_webdav_no_access_code: 'Specify access code',
       error_webdav_no_background_response: 'The background process didn\'t respond',
       error_webdav_no_permission: 'Permission to access the WebDAV server was not granted',
+      notify_webdav_permission_page_opened: 'A window has been opened to grant server access. Allow access and retry the sync.',
 
       empty_search_results: 'Nothing found in this category.',
       confirm_clear_all_new_short: 'Are you sure?',

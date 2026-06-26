@@ -749,12 +749,12 @@ function setSidebarDeps(d) {
         if (e.target.checked) {
           const origin = getWebDavOrigin();
           if (origin) {
-            const granted = await requestWebDavPermission(origin);
+            const { granted, pageOpened } = await requestWebDavPermission(origin);
             if (!granted) {
               e.target.checked = false;
               webdavConfig.enabled = false;
               await saveWebDavConfig();
-              showNotification(t('error_webdav_no_permission'));
+              showNotification(pageOpened ? t('notify_webdav_permission_page_opened') : t('error_webdav_no_permission'));
               return;
             }
           }

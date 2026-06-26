@@ -42,6 +42,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  // Проверка наличия host-permission для WebDAV-origin.
+  // chrome.permissions недоступен в content-скрипте, поэтому проверку делает background.
+  if (message.type === 'WEBDAV_CHECK_PERMISSION') {
+    const origin = message.origin;
+    if (!origin || !chrome.permissions) {
+      sendResponse({ success: true, granted: true });
+      return true;
+    }
+    chrome.permissions.contains({ origins: [origin] }, (granted) => {
+      sendResponse({ success: true, granted: !!granted });
+    });
+    return true;
+  }
+
+  // Открытие окна выдачи доступа к произвольному WebDAV-серверу.
+  // chrome.permissions.request требует контекст страницы расширения + user gesture,
+  // поэтому из content-скрипта открываем permissions.html (там есть кнопка-запрос).
+  // Компактное popup-окно вместо вкладки; оно само закрывается после выдачи прав.
+  if (message.type === 'OPEN_WEBDAV_PERMISSION_PAGE') {
+    const params = new URLSearchParams();
+    if (message.origin) params.set('origin', message.origin);
+    if (message.lang) params.set('lang', message.lang);
+    const url = chrome.runtime.getURL('permissions.html') + '?' + params.toString();
+    if (chrome.windows && chrome.windows.create) {
+      chrome.windows.create({ url, type: 'popup', width: 480, height: 360 }, () => {
+        sendResponse({ success: true });
+      });
+    } else {
+      // Фолбэк (напр. некоторые сборки Firefox без windows.create) — обычная вкладка.
+      chrome.tabs.create({ url }, () => {
+        sendResponse({ success: true });
+      });
+    }
+    return true;
+  }
+
   if (message.type === 'WEBDAV_REQUEST') {
     const { url, method, headers, bodyBase64 } = message;
 
