@@ -294,11 +294,16 @@ function setSidebarDeps(d) {
     const settingsBtn = document.getElementById('lf-settings-btn');
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
-        state.ui.activeTitle = null;
         if (state.ui.activeTab === 'settings') {
+          // Выход из настроек — возвращаем туда, откуда пришли: либо открытую
+          // карточку тайтла, либо предыдущую вкладку.
           state.ui.activeTab = state.ui.previousTab || 'favorite';
+          state.ui.activeTitle = state.ui.previousTitle || null;
         } else {
+          // Вход в настройки — запоминаем и вкладку, и открытую карточку.
           state.ui.previousTab = state.ui.activeTab;
+          state.ui.previousTitle = state.ui.activeTitle;
+          state.ui.activeTitle = null;
           state.ui.activeTab = 'settings';
         }
         render();
@@ -1655,8 +1660,8 @@ function setSidebarDeps(d) {
       
       const sortType = state.settings.titleSort || 'name_asc';
       sortedPosts.sort((a, b) => {
-        const isReadA = readSet.has(String(a.id)) || (state.settings.syncLikes && a.isLiked);
-        const isReadB = readSet.has(String(b.id)) || (state.settings.syncLikes && b.isLiked);
+        const isReadA = state.settings.syncLikes ? !!a.isLiked : readSet.has(String(a.id));
+        const isReadB = state.settings.syncLikes ? !!b.isLiked : readSet.has(String(b.id));
         
         switch (sortType) {
           case 'name_asc':
@@ -1690,9 +1695,10 @@ function setSidebarDeps(d) {
         row.className = 'lf-chapter-row';
         
         const isLiked = state.settings.syncLikes && post.isLiked;
-        const isChecked = readSet.has(String(post.id)) || isLiked;
+        // Лайк — приоритет: при syncLikes галочка строго следует за isLiked.
+        const isChecked = state.settings.syncLikes ? !!post.isLiked : readSet.has(String(post.id));
         const dateStr = formatDate(post.publishTime);
-        
+
         const chapterUrl = `https://boosty.to/lightfoxmanga/posts/${post.id}`;
         const targetAttr = state.settings.openTitlesInCurrentTab ? '' : 'target="_blank"';
         
@@ -2068,8 +2074,9 @@ function setSidebarDeps(d) {
       row.className = 'lf-chapter-row';
       
       const isLiked = state.settings.syncLikes && post.isLiked;
-      const isChecked = readSet.has(String(post.id)) || isLiked;
-      
+      // Лайк — приоритет: при syncLikes галочка строго следует за isLiked.
+      const isChecked = state.settings.syncLikes ? !!post.isLiked : readSet.has(String(post.id));
+
       const dateStr = formatDate(post.publishTime);
       
       let chapterUrl;

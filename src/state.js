@@ -49,6 +49,7 @@ let state = {
   ui: {
     activeTab: 'favorite', // 'favorite', 'watching', 'new', 'all', 'completed', 'dropped'
     previousTab: 'favorite', // Запоминает предыдущую вкладку перед переходом в настройки
+    previousTitle: null,   // Запоминает открытую карточку тайтла перед переходом в настройки
     searchQuery: '',
     activeTitle: null,     // Название тайтла, открытого в детальном виде (null = список)
     sortAsc: false,        // Сортировка глав: true - сначала старые (1-10, 11-20), false - новые

@@ -117,24 +117,18 @@ function handleInterceptedReaction(postId, isLiked) {
     if (syncCheckbox.classList.contains('lf-liked-checkbox')) {
       syncCheckbox.classList.remove('lf-liked-checkbox');
     }
-    // Если чекбокс checked, но пост НЕ в readPosts — он был checked только через isLiked.
-    // Снимаем чекбокс (лайк снят → не просмотрено).
+    // Лайк — приоритет: при включённой синхронизации галочка строго следует за
+    // лайком. Снят лайк → снимаем галочку безусловно (readPosts не учитываем,
+    // иначе устаревшая отметка оставила бы галочку, рассинхрон с лайком).
     if (syncCheckbox.checked) {
+      syncCheckbox.checked = false;
+      console.log(`[BoostyBookmark] Дизлайк → снимаем галочку для поста ${postId}`);
       const allGrouped = getGroupedTitles();
       const parentTitle = allGrouped.find(manga => manga.posts.some(p => String(p.id) === postIdStr));
       if (parentTitle) {
-        const userData = state.user_data[parentTitle.name];
-        const readPosts = (userData && userData.readPosts) || [];
-        if (!readPosts.includes(postIdStr)) {
-          syncCheckbox.checked = false;
-          console.log(`[BoostyBookmark] Рассинхрон (Направление 2, дизлайк): чекбокс снят для поста ${postId} (не был в readPosts)`);
-          const updatedManga = getGroupedTitles().find(t => t.name === parentTitle.name);
-          if (updatedManga) {
-            const headerLabel = document.querySelector('.lf-chapters-header .lf-field-label');
-            if (headerLabel) {
-              headerLabel.textContent = t('detail_chapters_count_label', updatedManga.readCount, updatedManga.posts.length);
-            }
-          }
+        const headerLabel = document.querySelector('.lf-chapters-header .lf-field-label');
+        if (headerLabel) {
+          headerLabel.textContent = t('detail_chapters_count_label', parentTitle.readCount, parentTitle.posts.length);
         }
       }
     }

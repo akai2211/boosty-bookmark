@@ -140,7 +140,10 @@ function getGroupedTitlesInternal(posts) {
     let readCount = 0;
     
     title.posts.forEach(post => {
-      const isRead = readSet.has(String(post.id)) || (state.settings.syncLikes && post.isLiked);
+      // При включённой синхронизации лайков источник истины — лайк (isLiked),
+      // readPosts полностью игнорируется (иначе устаревшая отметка «воскрешает»
+      // галочку после снятия лайка). При выключенной — обычные ручные отметки.
+      const isRead = state.settings.syncLikes ? !!post.isLiked : readSet.has(String(post.id));
       if (isRead) readCount++;
     });
     
