@@ -58,12 +58,19 @@ function handleInterceptedReaction(postId, isLiked) {
   if (!isExtensionContextValid()) return;
 
   const post = state.posts.find(p => String(p.id) === String(postId));
-  if (post && post.isLiked !== isLiked) {
+  const changed = !!(post && post.isLiked !== isLiked);
+  if (changed) {
     post.isLiked = isLiked;
-
-    // Обновляем кэш в хранилище
+    // Обновляем кэш в хранилище (актуально и при выключенной синхронизации — данные не врут)
     saveStateToStorage();
+  }
 
+  // Дальше — синхронизация ГАЛОЧКИ по лайку. Работает только при включённой
+  // настройке «Отмечать просмотр лайком». Если она выключена — лайки и галочки
+  // независимы (рассинхрон допустим намеренно), чекбоксы не трогаем.
+  if (!state.settings.syncLikes) return;
+
+  if (changed) {
     // Если детальный вид тайтла открыт — обновляем чекбокс точечно, без полного ререндера
     const checkbox = document.querySelector(`.lf-chapter-checkbox[data-post-id="${postId}"]`);
     if (checkbox && checkbox.checked !== isLiked) {
@@ -1057,89 +1064,9 @@ function analyzeNewContent(oldPosts, freshPosts) {
 // -------------------------------------------------------------
 // РЕАКЦИИ BOOSTY (лайки)
 // -------------------------------------------------------------
-// Отправка лайка (реакции) на пост в Boosty
-async function sendBoostyReaction(postId) {
-  const token = getBoostyAuthToken();
-  if (!token) {
-    console.warn('Не удалось поставить лайк на Boosty: токен авторизации отсутствует.');
-    return;
-  }
-  
-  try {
-    const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/${postId}/reaction?from_page=blog`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: new URLSearchParams({ reaction: 'heart' }),
-      credentials: 'include'
-    });
-    
-    if (!response.ok) {
-      const text = await response.text();
-      console.warn(`Не удалось поставить лайк на Boosty (статус ${response.status}):`, text);
-      return;
-    }
-    
-    console.log(`Лайк успешно отправлен на Boosty для поста ${postId}`);
-    
-    // Обновляем локальный кэш поста, чтобы при ререндере он отображался как лайкнутый
-    const post = state.posts.find(p => String(p.id) === String(postId));
-    if (post) post.isLiked = true;
-    
-  } catch (e) {
-    if (typeof DEV !== 'undefined' && DEV) {
-      console.warn('Не удалось отправить реакцию на Boosty:', e);
-    } else {
-      console.log('Не удалось отправить реакцию на Boosty:', e.message || e);
-    }
-  }
-}
-
-// Удаление лайка (реакции) с поста на Boosty
-async function removeBoostyReaction(postId) {
-  const token = getBoostyAuthToken();
-  if (!token) {
-    console.warn('Не удалось снять лайк на Boosty: токен авторизации отсутствует.');
-    return;
-  }
-  
-  try {
-    const url = `https://api.boosty.to/v1/blog/${BLOG_SLUG}/post/${postId}/reaction?from_page=blog`;
-    
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: new URLSearchParams({ reaction: 'heart' }),
-      credentials: 'include'
-    });
-    
-    if (!response.ok) {
-      const text = await response.text();
-      console.warn(`Не удалось снять лайк на Boosty (статус ${response.status}):`, text);
-      return;
-    }
-    
-    console.log(`Лайк успешно снят на Boosty для поста ${postId}`);
-    
-    // Обновляем локальный кэш поста
-    const post = state.posts.find(p => String(p.id) === String(postId));
-    if (post) post.isLiked = false;
-    
-  } catch (e) {
-    if (typeof DEV !== 'undefined' && DEV) {
-      console.warn('Не удалось снять реакцию на Boosty:', e);
-    } else {
-      console.log('Не удалось снять реакцию на Boosty:', e.message || e);
-    }
-  }
-}
+// Расширение лайки САМО не ставит и не снимает — это делается только на самом
+// посте Boosty. Сюда приходит лишь обратное направление (лайк на посте → галочка)
+// через перехват fetch/XHR в page_script.js → handleInterceptedReaction.
 
 export {
   setSyncDeps,
@@ -1165,7 +1092,5 @@ export {
   performIncrementalSync,
   performFullSync,
   backgroundSync,
-  analyzeNewContent,
-  sendBoostyReaction,
-  removeBoostyReaction
+  analyzeNewContent
 };

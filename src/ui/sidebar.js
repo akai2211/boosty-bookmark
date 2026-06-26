@@ -30,9 +30,7 @@ import {
   performWebDavSync,
   saveWebDavSettingsFromForm,
   performIncrementalSync,
-  performFullSync,
-  sendBoostyReaction,
-  removeBoostyReaction
+  performFullSync
 } from '../sync.js';
 import { getGroupedTitles } from '../grouping.js';
 import {
@@ -256,33 +254,12 @@ function setSidebarDeps(d) {
     }, 500);
   }
 
-  // Шлёт в page_script полный список лайкнутых постов для проактивной подсветки сердечек.
-  // Дебаунс: render() дёргается часто (вкладки/тоглы), а пересинхрон нужен лишь когда DOM/лайки
-  // устаканились — коалесцируем всплески в одно сообщение.
-  let syncLikesTimeout;
-  function syncAllLikesToPage() {
-    clearTimeout(syncLikesTimeout);
-    syncLikesTimeout = setTimeout(() => {
-      if (!state.posts) return;
-      const likedIds = state.posts
-        .filter(p => p.isLiked)
-        .map(p => String(p.id));
-
-      window.postMessage({
-        type: 'LF_SYNC_ALL_LIKES',
-        likedIds
-      }, '*');
-    }, 200);
-  }
-
   // -------------------------------------------------------------
   // ОТРИСОВКА СОДЕРЖИМОГО (ОСНОВНОЙ РЕНДЕР)
   // -------------------------------------------------------------
   function render() {
     const sidebar = document.getElementById('lf-sidebar');
     if (!sidebar) return;
-
-    syncAllLikesToPage();
 
     const bodyContent = document.getElementById('lf-body-content');
     const savedScrollTop = bodyContent ? bodyContent.scrollTop : 0;
@@ -1739,7 +1716,7 @@ function setSidebarDeps(d) {
         }
 
         row.innerHTML = `
-          <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? `title="${escapeHtml(t('post_liked_on_boosty'))}"` : ''}>
+          <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}${state.settings.syncLikes ? ' lf-checkbox-locked' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? `title="${escapeHtml(t('post_liked_on_boosty'))}"` : (state.settings.syncLikes ? `title="${escapeHtml(t('post_mark_via_like'))}"` : '')}>
           <div class="lf-chapter-title-container">
             <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title === 'Без названия' ? t('untitled_post') : post.title)}">
               ${escapeHtml(post.title === 'Без названия' ? t('untitled_post') : post.title)}
@@ -1750,6 +1727,12 @@ function setSidebarDeps(d) {
         `;
         
         const checkbox = row.querySelector('.lf-chapter-checkbox');
+        // Режим «Отмечать просмотр лайком»: галочка read-only, но цвет остаётся
+        // обычным (не серый disabled). Блокируем переключение перехватом клика —
+        // отметить главу можно только лайком на самом посте Boosty.
+        if (state.settings.syncLikes) {
+          checkbox.addEventListener('click', (e) => e.preventDefault());
+        }
         checkbox.addEventListener('change', (e) => {
           if (e.target.classList.contains('lf-liked-checkbox') && !e.target.checked) {
             e.target.classList.remove('lf-liked-checkbox');
@@ -1791,15 +1774,6 @@ function setSidebarDeps(d) {
           setPostReadState(manga.name, postId, e.target.checked);
           saveStateToStorage();
 
-          if (e.target.checked) {
-            sendBoostyReaction(postId);
-            // Косметически подсвечиваем сердечко на странице (без программного клика — он на текущей вёрстке не срабатывает)
-            window.postMessage({ type: 'LF_SET_LIKE_VISUAL', postId, isLiked: true }, '*');
-          } else {
-            removeBoostyReaction(postId);
-            window.postMessage({ type: 'LF_SET_LIKE_VISUAL', postId, isLiked: false }, '*');
-          }
-          
           const updatedManga = getGroupedTitles().find(t => t.name === manga.name);
           if (updatedManga) {
             const groupCountSpan = header.querySelector('.lf-group-count');
@@ -1811,7 +1785,7 @@ function setSidebarDeps(d) {
         
         const link = row.querySelector('.lf-chapter-title-link');
         link.addEventListener('click', (e) => {
-          if (state.settings.autoMarkOpen && !checkbox.checked && !checkbox.classList.contains('lf-liked-checkbox')) {
+          if (state.settings.autoMarkOpen && !state.settings.syncLikes && !checkbox.checked && !checkbox.classList.contains('lf-liked-checkbox')) {
             checkbox.checked = true;
             checkbox.dispatchEvent(new Event('change'));
           }
@@ -2129,7 +2103,7 @@ function setSidebarDeps(d) {
       }
 
       row.innerHTML = `
-        <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? `title="${escapeHtml(t('post_liked_on_boosty'))}"` : ''}>
+        <input type="checkbox" class="lf-chapter-checkbox ${isLiked ? 'lf-liked-checkbox' : ''}${state.settings.syncLikes ? ' lf-checkbox-locked' : ''}" data-post-id="${post.id}" ${isChecked ? 'checked' : ''} ${isLiked ? `title="${escapeHtml(t('post_liked_on_boosty'))}"` : (state.settings.syncLikes ? `title="${escapeHtml(t('post_mark_via_like'))}"` : '')}>
         <div class="lf-chapter-title-container">
           <a class="lf-chapter-title-link" href="${chapterUrl}" ${targetAttr} title="${escapeHtml(post.title === 'Без названия' ? t('untitled_post') : post.title)}">
             ${escapeHtml(post.title === 'Без названия' ? t('untitled_post') : post.title)}
@@ -2141,6 +2115,11 @@ function setSidebarDeps(d) {
       
       // Клик по чекбоксу
       const checkbox = row.querySelector('.lf-chapter-checkbox');
+      // Режим «Отмечать просмотр лайком»: галочка read-only с обычным цветом —
+      // блокируем переключение перехватом клика (отметка только лайком на посте).
+      if (state.settings.syncLikes) {
+        checkbox.addEventListener('click', (e) => e.preventDefault());
+      }
       checkbox.addEventListener('change', (e) => {
         // Мы больше не блокируем снятие галочки для пролайканных постов
         if (e.target.classList.contains('lf-liked-checkbox') && !e.target.checked) {
@@ -2183,16 +2162,6 @@ function setSidebarDeps(d) {
         setPostReadState(manga.name, postId, e.target.checked);
         saveStateToStorage();
 
-        // Отправляем прямой запрос на обновление лайка на сервере Boosty
-        if (e.target.checked) {
-          sendBoostyReaction(postId);
-          // Косметически подсвечиваем сердечко на странице (без программного клика — он на текущей вёрстке не срабатывает)
-          window.postMessage({ type: 'LF_SET_LIKE_VISUAL', postId, isLiked: true }, '*');
-        } else {
-          removeBoostyReaction(postId);
-          window.postMessage({ type: 'LF_SET_LIKE_VISUAL', postId, isLiked: false }, '*');
-        }
-        
         // Обновляем циферки прогресса в заголовке
         const updatedManga = getGroupedTitles().find(t => t.name === manga.name);
         if (updatedManga) {
@@ -2207,7 +2176,7 @@ function setSidebarDeps(d) {
       const link = row.querySelector('.lf-chapter-title-link');
       link.addEventListener('click', (e) => {
         // Автоматическое помечание как просмотренного при переходе по ссылке
-        if (state.settings.autoMarkOpen && !checkbox.checked && !checkbox.classList.contains('lf-liked-checkbox')) {
+        if (state.settings.autoMarkOpen && !state.settings.syncLikes && !checkbox.checked && !checkbox.classList.contains('lf-liked-checkbox')) {
           checkbox.checked = true;
           checkbox.dispatchEvent(new Event('change'));
         }
