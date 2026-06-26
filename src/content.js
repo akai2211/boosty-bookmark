@@ -98,6 +98,11 @@ function cleanup() {
   // Удаляем слушатель сообщений от page_script.js
   if (eventHandlers.messageHandler) window.removeEventListener('message', eventHandlers.messageHandler);
 
+  // Снимаем слушатель хранилища для приветственного поп-апа
+  if (eventHandlers.welcomeStorageListener) {
+    try { chrome.storage.onChanged.removeListener(eventHandlers.welcomeStorageListener); } catch (e) {}
+  }
+
   cleanupHeaderObserver();
 
   // Удаляем внедрённые DOM-элементы
@@ -170,6 +175,11 @@ async function checkUrlAndToggleVisibility() {
       if (state.settings.sidebarOpen) {
         triggerAutoWebDavSync();
       }
+
+      // Сайдбар только что создан — если ждёт приветствие первой установки,
+      // показываем его здесь. Надёжнее единственного вызова в init: покрывает
+      // переход на целевую страницу уже после init и гонку с флагом.
+      maybeShowWelcome();
     } else {
       // Если интерфейс уже есть, просто показываем его
       btn.style.display = '';
@@ -295,6 +305,21 @@ async function init() {
 
   // Приветственный поп-ап при первой установке (один раз)
   await maybeShowWelcome();
+
+  // Подстраховка от гонки: флаг lf_welcome_pending ставит background.onInstalled
+  // асинхронно и может прийти уже ПОСЛЕ init. Слушаем изменения хранилища и
+  // показываем приветствие, как только флаг появится (если сайдбар готов; иначе
+  // флаг сохранится и сработает при создании сайдбара).
+  try {
+    if (chrome.storage && chrome.storage.onChanged) {
+      eventHandlers.welcomeStorageListener = (changes, area) => {
+        if (area === 'local' && changes.lf_welcome_pending && changes.lf_welcome_pending.newValue) {
+          maybeShowWelcome();
+        }
+      };
+      chrome.storage.onChanged.addListener(eventHandlers.welcomeStorageListener);
+    }
+  } catch (e) {}
 
   // Слушаем закрытие страницы, чтобы обновить время последнего визита
   eventHandlers.beforeunload = () => {
