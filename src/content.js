@@ -115,6 +115,28 @@ function cleanup() {
   }
 }
 
+// Достаёт id поста для кнопки реакций: поднимается до контейнера поста (COMMON_POST:ROOT)
+// и берёт id из ссылки /posts/<id> внутри него.
+function getPostIdForReactionBtn(btn) {
+  const postRoot = btn.closest('[data-test-id="COMMON_POST:ROOT"]');
+  const link = postRoot && postRoot.querySelector('a[href*="/posts/"]');
+  if (!link) return null;
+  const m = (link.getAttribute('href') || '').match(/\/posts\/([a-f0-9-]+)/i);
+  return m ? m[1] : null;
+}
+
+// Подсветка блока реакций оранжевой окантовкой (фирменный цвет Boosty) — только на постах,
+// где есть МОЯ реакция (лайк). Источник истины — state.posts[].isLiked (односторонняя
+// синхронизация лайков). data-active со страницы для этого не годится. Стиль — styles.css.
+function highlightReactionBlocks() {
+  const buttons = document.querySelectorAll('[data-test-id="COMMON_REACTIONS_REACTIONSPOST:ROOT"]');
+  buttons.forEach((btn) => {
+    const postId = getPostIdForReactionBtn(btn);
+    const post = postId ? state.posts.find((p) => p.id === postId) : null;
+    btn.classList.toggle('lf-my-reaction', !!(post && post.isLiked));
+  });
+}
+
 // Управление видимостью интерфейса в зависимости от URL
 async function checkUrlAndToggleVisibility() {
   checkAndTriggerOpenChat();
@@ -127,6 +149,7 @@ async function checkUrlAndToggleVisibility() {
     checkAndScrollToFeed();
     checkAndScrollToPost();
     initPlayerTracking();
+    highlightReactionBlocks();
     if (!btn || !sidebar) {
       // Создаем элементы интерфейса
       createSidebar();

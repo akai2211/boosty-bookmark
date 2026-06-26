@@ -1675,6 +1675,15 @@
   fill: currentColor;
 }
 
+/* Подсветка блока реакций поста, на котором есть МОЯ реакция (лайк): тонкий бордер +
+   лёгкая заливка фирменным оранжевым Boosty (#f15f2c) — в стиле кнопки «Обновить
+   расширение». inset box-shadow повторяет скругление кнопки (8px) и не сдвигает вёрстку.
+   Класс навешивает highlightReactionBlocks(). */
+[data-test-id="COMMON_REACTIONS_REACTIONSPOST:ROOT"].lf-my-reaction {
+  box-shadow: inset 0 0 0 1px rgba(241, 95, 44, 0.45);
+  background-color: rgba(241, 95, 44, 0.1);
+}
+
 
 
 /* DEV_ONLY_START */
