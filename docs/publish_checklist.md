@@ -21,8 +21,10 @@
 ### Developer Dashboard — раздел Privacy practices
 - [ ] **Обоснование `storage` / `unlimitedStorage`:**
   > Used to store post lists for Boosty blogs, which may contain thousands of posts and exceed the default 5 MB chrome.storage.local quota.
+- [ ] **Обоснование `host_permissions` (`https://webdav.yandex.ru/*`):**
+  > Static host access to the Yandex.Disk WebDAV endpoint, the built-in cloud-sync provider. Its URL is fixed, so it is declared statically (an optional permission cannot be requested from a content script, where the extension's UI lives). Used only to read/write the user's own backup file when WebDAV sync is configured.
 - [ ] **Обоснование `optional_host_permissions` (`https://*/*`, `http://*/*`):**
-  > Required for WebDAV cloud sync: the user manually enters a custom server URL (e.g. Nextcloud, personal NAS). Since any host may be used, broad host access is requested as an optional permission — it is only granted when the user explicitly configures a WebDAV server.
+  > Required for the "custom WebDAV" sync option: the user manually enters an arbitrary server URL (e.g. Nextcloud, personal NAS). Since any host may be used, broad host access is requested as an optional permission — granted only when the user explicitly clicks "Grant access" in a dedicated permission window (permissions.html) for the server they configured.
 - [ ] **Обоснование `page_script.js` в MAIN world:**
   > page_script.js runs in the MAIN world for two read-only purposes. (1) It intercepts Boosty's own fetch/XHR calls to /reaction endpoints to instantly reflect the user's like state in the extension sidebar (one-directional: like on the post → checkbox), without extra API calls. The extension never sends likes itself. (2) It overrides Storage.getItem for the vk_player_preferred_quality key to apply the user's preferred video quality in the embedded VK player. No page content is modified or exfiltrated.
 - [ ] **Privacy practices / Single purpose statement:**
@@ -48,7 +50,8 @@
 - [ ] Добавить скриншоты (те же, что для Chrome)
 - [ ] В поле **«Notes to reviewer»** кратко объяснить:
   - Зачем `world: "MAIN"` в `page_script.js` (перехват fetch/XHR для синхронизации лайков)
-  - Зачем `optional_host_permissions` на все хосты (WebDAV с произвольным сервером)
+  - Зачем статический `host_permissions` на `webdav.yandex.ru` (встроенный провайдер Яндекс.Диск, фиксированный URL)
+  - Зачем `optional_host_permissions` на все хосты (произвольный WebDAV-сервер; выдаётся через окно `permissions.html` по кнопке пользователя)
 
 ---
 

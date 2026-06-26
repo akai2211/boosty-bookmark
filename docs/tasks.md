@@ -242,3 +242,20 @@
 - [x] В продакшене (`DEV === false`) использовать обычный `console.log` с текстовым описанием ошибки (`e.message || e`), чтобы Chrome Extensions не регистрировал эти штатные ситуации как критические ошибки расширения в `chrome://extensions`.
 
 
+## 31. 🐞 БАГ: WebDAV-синхронизация не работала («Ошибка сети / Failed to fetch»)
+> Обнаружен и **ИСПРАВЛЕН 2026-06-27**. Проверено: учётка/сервер валидны (curl PROPFIND → 207), но синк падал. Детали — `docs/technical_notes.md` §43.
+- [x] **Корень:** `chrome.permissions` недоступен в content-скрипте (где живёт UI синхронизации). Старый `requestWebDavPermission` по ветке `!chrome.permissions` молча возвращал «успех», диалог выдачи прав не показывался, optional host-permission не выдавался → MV3 блокировал `fetch` к WebDAV-хосту из background (service worker).
+- [x] **Яндекс.Диск:** URL фиксирован — вынесен в статические `host_permissions` (`https://webdav.yandex.ru/*`) в обоих манифестах; `permissions.contains` всегда true, runtime-запрос не нужен.
+- [x] **Произвольный WebDAV:** окно `permissions.html` + `permissions.js` с кнопкой «Выдать доступ» (`chrome.permissions.request` — в контексте страницы расширения + user-gesture). Открывается из `background.js` компактным popup-окном (`chrome.windows.create`, фолбэк — вкладка), само закрывается после выдачи. Добавлены в `INCLUDE_PATHS` (`build.cjs`).
+- [x] **Маршрутизация:** проверка прав из content идёт через background (`WEBDAV_CHECK_PERMISSION` → `chrome.permissions.contains`); `requestWebDavPermission` → `{ granted, pageOpened }`; уведомление `notify_webdav_permission_page_opened`. Локализация окна по `getCurrentLang()`.
+- [x] Обновлены unit-тесты `requestWebDavPermission` (объект-результат); `npm test` зелёный.
+
+## 32. Приветственный поп-ап при первой установке
+> Реализовано 2026-06-27. Детали — `docs/technical_notes.md` §44.
+- [x] `background.js` (`chrome.runtime.onInstalled`, `reason === 'install'`) ставит флаг `lf_welcome_pending` в `chrome.storage.local` (только чистая установка, не обновление).
+- [x] `maybeShowWelcome()` в `init` (`src/content.js`): показывает окно один раз, сразу снимая флаг; если сайдбар ещё не создан — флаг остаётся до следующего захода.
+- [x] `showWelcomeModal()` (`src/ui/sidebar.js`) через оверлей `.lf-modal-overlay` (как USDT); перед показом разворачивает панель. Шаблон `welcomeModalTemplate()` (`templates.js`): благодарность, пометка о предрелизном статусе, призыв сообщать о багах, кнопки «Мой Boosty» (`boosty.to/akai2211`) и «Закрыть».
+- [x] Локализация RU/EN (`welcome_*`), стили `.lf-welcome-*` в `styles.css`.
+- [x] e2e: `beforeEach` гасит флаг через service worker, иначе окно перекрывает сайдбар и ломает клики. `npm test` зелёный.
+
+
