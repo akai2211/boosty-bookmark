@@ -8,10 +8,8 @@
 
 ## 🚀 Ссылки на магазины расширений
 
-Вы можете установить расширение из официальных магазинов (в данный момент ссылки являются заглушками до завершения модерации):
-
-* **Chrome Web Store:** [Установить для Google Chrome / Яндекс.Браузер / Opera](https://chromewebstore.google.com/detail/boosty-bookmark/YOUR_EXTENSION_ID_PLACEHOLDER)
-* **Firefox Add-ons:** [Установить для Mozilla Firefox](https://addons.mozilla.org/ru/firefox/addon/boosty-bookmark/)
+* **Chrome Web Store:** [Установить для Google Chrome / Яндекс.Браузер / Opera](https://chromewebstore.google.com/detail/boosty-bookmark/jcdgnendfpgnljokclbfkhakmppimmmj)
+* **Firefox Add-ons:** *Ожидается (на модерации)*
 
 ---
 
