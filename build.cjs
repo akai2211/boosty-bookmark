@@ -11,6 +11,7 @@ const TMP_DIR = path.join(__dirname, '.tmp_build');
 // забандлены внутрь content.js и в архив отдельными файлами не попадают.
 const INCLUDE_PATHS = [
   'icons',
+  '_locales',
   isFirefox ? 'manifest.firefox.json' : 'manifest.json',
   'background.js',
   'styles.css',

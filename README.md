@@ -9,7 +9,7 @@
 ## 🚀 Ссылки на магазины расширений
 
 * **Chrome Web Store:** [Установить для Google Chrome / Яндекс.Браузер / Opera](https://chromewebstore.google.com/detail/boosty-bookmark/jcdgnendfpgnljokclbfkhakmppimmmj)
-* **Firefox Add-ons:** *Ожидается (на модерации)*
+* **Firefox Add-ons:** [Установить для Mozilla Firefox](https://addons.mozilla.org/ru/firefox/addon/boosty-bookmark/) *(на проверке)*
 
 ---
 
