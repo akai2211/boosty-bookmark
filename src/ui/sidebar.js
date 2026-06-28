@@ -1914,16 +1914,20 @@ function setSidebarDeps(d) {
     const targetAttr = state.settings.openTitlesInCurrentTab ? '' : 'target="_blank"';
     const isAnnouncements = manga.name === 'Объявления';
     
-    container.innerHTML = `
-      <div class="lf-detail">
-        <!-- Кнопка Назад -->
+    const backSlot = document.getElementById('lf-detail-back-slot');
+    if (backSlot) {
+      backSlot.innerHTML = `
         <div class="lf-detail-back" id="lf-detail-back">
           <svg viewBox="0 0 24 24">
             <path d="M20,11H7.83L13.41,5.41L12,4L4,12L12,20L13.41,18.59L7.83,13H20V11Z" />
           </svg>
           ${t('detail_back_btn')}
         </div>
-        
+      `;
+    }
+
+    container.innerHTML = `
+      <div class="lf-detail">
         <!-- Заголовок -->
         <h2 class="lf-detail-title">
           ${isAnnouncements 

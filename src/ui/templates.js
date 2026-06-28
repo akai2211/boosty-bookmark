@@ -129,6 +129,8 @@ function sidebarShellTemplate(uniqueTagCount) {
         </div>
       ` : ''}
 
+      <div id="lf-detail-back-slot"></div>
+
       <div class="lf-body-content" id="lf-body-content">
         <!-- Сюда рендерится динамическое содержимое -->
       </div>

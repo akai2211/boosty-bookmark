@@ -575,6 +575,16 @@
   gap: 12px;
 }
 
+#lf-detail-back-slot {
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid var(--lf-border);
+  flex-shrink: 0;
+}
+
+#lf-detail-back-slot:empty {
+  display: none;
+}
+
 .lf-detail-back {
   display: flex;
   align-items: center;
